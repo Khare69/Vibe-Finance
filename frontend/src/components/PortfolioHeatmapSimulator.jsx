@@ -56,12 +56,19 @@ export default function PortfolioHeatmapSimulator({
     }
   };
 
-  const sectorAllocation = portfolio?.sector_allocation || [
+  const sectorAllocation = portfolio?.sector_allocations?.map((s, idx) => ({
+    sector: s.sector,
+    percentage: s.allocation_pct ?? s.percentage ?? 25,
+    color: ['#6366f1', '#10b981', '#38bdf8', '#f59e0b', '#94a3b8'][idx % 5],
+  })) || portfolio?.sector_allocation || [
     { sector: 'IT Services', percentage: 46.5, color: '#6366f1' },
     { sector: 'Energy / Retail', percentage: 26.5, color: '#10b981' },
     { sector: 'Consumer Tech', percentage: 14.0, color: '#38bdf8' },
     { sector: 'Cash Reserve', percentage: 13.0, color: '#94a3b8' },
   ];
+
+  const portfolioBeta = portfolio?.portfolio_beta ?? 0.88;
+  const portfolioCash = portfolio?.cash ?? 450000;
 
   return (
     <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-5 shadow-xl space-y-6">
@@ -85,11 +92,15 @@ export default function PortfolioHeatmapSimulator({
         <div className="flex items-center gap-4 text-xs font-mono bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
           <div>
             <span className="text-slate-500 text-[10px] block">Portfolio Beta</span>
-            <span className="font-bold text-white">0.88 (Defensive)</span>
+            <span className="font-bold text-white">
+              {portfolioBeta} ({Number(portfolioBeta) > 1.1 ? 'Aggressive' : 'Defensive'})
+            </span>
           </div>
           <div className="border-l border-slate-800 pl-3">
             <span className="text-slate-500 text-[10px] block">Cash Reserve</span>
-            <span className="font-bold text-emerald-400">₹4,50,000</span>
+            <span className="font-bold text-emerald-400">
+              ₹{Number(portfolioCash).toLocaleString()}
+            </span>
           </div>
         </div>
       </div>

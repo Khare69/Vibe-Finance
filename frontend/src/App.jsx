@@ -20,6 +20,12 @@ import {
   getPortfolio,
 } from './services/api';
 
+import {
+  MOCK_STOCKS,
+  MOCK_ANALYSES,
+  MOCK_USER_PORTFOLIO,
+} from './services/mockData';
+
 export default function App() {
   // System & Profile State
   const [systemHealth, setSystemHealth] = useState(null);
@@ -31,11 +37,11 @@ export default function App() {
     portfolio_cash: 250000,
   });
 
-  // Stock & Analysis State
-  const [stocks, setStocks] = useState([]);
+  // Stock & Analysis State - initialized with instant baseline data so screen never flashes blank
+  const [stocks, setStocks] = useState(MOCK_STOCKS);
   const [selectedTicker, setSelectedTicker] = useState('RELIANCE');
-  const [analysis, setAnalysis] = useState(null);
-  const [portfolio, setPortfolio] = useState(null);
+  const [analysis, setAnalysis] = useState(MOCK_ANALYSES['RELIANCE']);
+  const [portfolio, setPortfolio] = useState(MOCK_USER_PORTFOLIO);
   const [isLoading, setIsLoading] = useState(false);
 
   // Modals & UI Controls

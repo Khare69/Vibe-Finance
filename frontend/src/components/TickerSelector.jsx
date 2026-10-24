@@ -46,7 +46,10 @@ export default function TickerSelector({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {filtered.map((stock) => {
           const isSelected = selectedTicker === stock.ticker;
-          const isPositive = stock.change >= 0;
+          const rawPrice = stock.current_price ?? stock.price ?? 0;
+          const rawChange = stock.change_percent ?? stock.change ?? 0;
+          const isPositive = rawChange >= 0;
+          const symbol = stock.symbol || (stock.currency === 'INR' || ['RELIANCE', 'TCS', 'INFY'].includes(stock.ticker) ? '₹' : '$');
 
           return (
             <button
@@ -79,8 +82,8 @@ export default function TickerSelector({
 
               <div className="flex items-baseline justify-between pt-1 border-t border-slate-800/60">
                 <span className="font-mono text-xs font-semibold text-slate-200">
-                  {stock.symbol}
-                  {stock.price.toLocaleString(undefined, {
+                  {symbol}
+                  {Number(rawPrice).toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   })}
@@ -96,7 +99,7 @@ export default function TickerSelector({
                     <TrendingDown className="w-3 h-3 mr-0.5 inline" />
                   )}
                   {isPositive ? '+' : ''}
-                  {stock.change}%
+                  {rawChange}%
                 </span>
               </div>
             </button>
