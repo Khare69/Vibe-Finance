@@ -10,7 +10,11 @@ import {
   Layers,
   Copy,
   Check,
+  UploadCloud,
+  FilePlus,
+  Sparkles,
 } from 'lucide-react';
+import { uploadRagDocument } from '../services/api';
 
 export default function DeveloperAuditDrawer({
   isOpen,
@@ -20,7 +24,15 @@ export default function DeveloperAuditDrawer({
   rawAnalysis,
 }) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState('telemetry');
+  const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'rag' | 'json'
+
+  // RAG upload state
+  const [uploadTicker, setUploadTicker] = useState('RELIANCE');
+  const [uploadTitle, setUploadTitle] = useState('Q4 Earnings & Guidance');
+  const [uploadSection, setUploadSection] = useState('Operational Update');
+  const [uploadContent, setUploadContent] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
 
   if (!isOpen) return null;
 
@@ -34,6 +46,27 @@ export default function DeveloperAuditDrawer({
   const ragLatency = agents?.rag?.latency_ms || 342;
   const riskLatency = agents?.behavioral_risk?.latency_ms || 85;
   const totalMs = telemetry?.total_execution_ms || quantLatency + ragLatency + riskLatency;
+
+  const handleUploadRag = async (e) => {
+    e.preventDefault();
+    if (!uploadContent.trim()) return;
+    setIsUploading(true);
+    setUploadResult(null);
+    try {
+      const res = await uploadRagDocument({
+        ticker: uploadTicker,
+        document_title: uploadTitle,
+        section: uploadSection,
+        content: uploadContent,
+      });
+      setUploadResult({ success: true, data: res });
+      setUploadContent('');
+    } catch (err) {
+      setUploadResult({ success: false, error: err.message });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in">
@@ -72,6 +105,16 @@ export default function DeveloperAuditDrawer({
             }`}
           >
             Latency & Pipeline Metrics
+          </button>
+          <button
+            onClick={() => setActiveTab('rag')}
+            className={`pb-2.5 font-semibold transition-colors border-b-2 ${
+              activeTab === 'rag'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Ingest to RAG Corpus
           </button>
           <button
             onClick={() => setActiveTab('json')}
@@ -188,6 +231,90 @@ export default function DeveloperAuditDrawer({
                 </div>
               )}
             </>
+          ) : activeTab === 'rag' ? (
+            <div className="space-y-4 text-xs">
+              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-1">
+                <div className="font-bold text-white flex items-center gap-1.5 text-sm">
+                  <UploadCloud className="w-4 h-4 text-indigo-400" />
+                  Live Dynamic Document Ingestion
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Upload an earnings call excerpt, SEC 10-Q filing, or SEBI circular. The RAG engine will chunk, extract sentiment polarity, and dynamically index it into the active vector corpus.
+                </p>
+              </div>
+
+              <form onSubmit={handleUploadRag} className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Ticker</label>
+                    <input
+                      type="text"
+                      value={uploadTicker}
+                      onChange={(e) => setUploadTicker(e.target.value.toUpperCase())}
+                      className="w-full bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-white font-mono"
+                      placeholder="e.g. RELIANCE, NVDA"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Section</label>
+                    <input
+                      type="text"
+                      value={uploadSection}
+                      onChange={(e) => setUploadSection(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-white font-mono"
+                      placeholder="e.g. Guidance / Risk"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Document Title</label>
+                  <input
+                    type="text"
+                    value={uploadTitle}
+                    onChange={(e) => setUploadTitle(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-xs rounded-lg px-2.5 py-2 text-white font-mono"
+                    placeholder="e.g. FY25 Annual Report"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Filing / Text Content</label>
+                  <textarea
+                    rows={6}
+                    value={uploadContent}
+                    onChange={(e) => setUploadContent(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 text-xs rounded-lg p-2.5 text-white font-mono leading-relaxed"
+                    placeholder="Paste regulatory text, earnings call management remarks, or broker research notes..."
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg font-bold transition-all shadow-md shadow-indigo-600/30 flex items-center justify-center gap-2"
+                >
+                  <FilePlus className="w-4 h-4" />
+                  <span>{isUploading ? 'Chunking & Indexing...' : 'Index Document into RAG Corpus'}</span>
+                </button>
+              </form>
+
+              {uploadResult && uploadResult.success && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 flex items-start gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">Document Successfully Indexed!</span>
+                    <span className="text-[11px] text-emerald-400/80">
+                      Created {uploadResult.data.chunks_created} vector chunks for {uploadResult.data.ticker}. Active corpus size: {uploadResult.data.total_corpus_documents} documents.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="space-y-3">
               <div className="flex justify-between items-center">

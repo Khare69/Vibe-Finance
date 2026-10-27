@@ -32,16 +32,31 @@ export default function PortfolioHeatmapSimulator({
     if (activeTicker) setTradeTicker(activeTicker);
   }, [activeTicker]);
 
+  // Baseline ticker price lookup to prevent cross-ticker price pollution
+  const TICKER_PRICES = {
+    RELIANCE: 2845.50,
+    TCS: 3915.00,
+    INFY: 1825.40,
+    NVDA: 142.80,
+    AAPL: 228.00,
+    TSLA: 240.00,
+  };
+
   const handleSimulateTrade = async (e) => {
     if (e) e.preventDefault();
     setIsSimulating(true);
+
+    // Use current active price only if the trade matches the actively viewed ticker; otherwise use ticker's base price
+    const resolvedPrice = (tradeTicker === activeTicker && currentPrice)
+      ? currentPrice
+      : (TICKER_PRICES[tradeTicker] || 150.0);
 
     try {
       const res = await simulateTrade({
         ticker: tradeTicker,
         action: tradeAction,
         quantity: Number(tradeQuantity),
-        price: currentPrice,
+        price: resolvedPrice,
         userProfile,
       });
 

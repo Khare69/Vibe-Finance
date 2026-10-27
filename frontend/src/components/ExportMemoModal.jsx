@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { X, Download, Copy, Check, FileText, Sparkles, ShieldCheck } from 'lucide-react';
+import { X, Download, Copy, Check, FileText, Sparkles, ShieldCheck, Database } from 'lucide-react';
+import { saveDecisionMemo } from '../services/api';
 
 export default function ExportMemoModal({ isOpen, onClose, analysis, userProfile }) {
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   if (!isOpen || !analysis) return null;
 
@@ -105,6 +108,25 @@ ${sentiment_shift?.keyword_frequencies?.map((k) => `  - "${k.word}": ${k.previou
     URL.revokeObjectURL(url);
   };
 
+  const handleSaveToDatabase = async () => {
+    setIsSaving(true);
+    try {
+      await saveDecisionMemo({
+        id: `memo_${ticker.toLowerCase()}_${Date.now()}`,
+        ticker,
+        company_name,
+        memo_markdown: memoContent,
+        created_at: new Date().toISOString()
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save memo to DB:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
       <div className="relative w-full max-w-4xl bg-[#0f172a] border border-indigo-500/30 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -156,6 +178,23 @@ ${sentiment_shift?.keyword_frequencies?.map((k) => `  - "${k.word}": ${k.previou
           </span>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveToDatabase}
+              disabled={isSaving}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-950/60 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-900/60 transition-colors"
+            >
+              {saveSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Saved to DB</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{isSaving ? 'Saving...' : 'Save to DB'}</span>
+                </>
+              )}
+            </button>
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"

@@ -275,3 +275,23 @@ export async function updateStoredUserProfile(profile) {
     return profile;
   }
 }
+
+export async function getStoredUserProfile() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/user-profile`);
+    if (!res.ok) throw new Error('Fetch profile failed');
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function getStoredMemos() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/memos`);
+    if (!res.ok) throw new Error('Fetch memos failed');
+    return await res.json();
+  } catch (err) {
+    return [];
+  }
+}

@@ -272,8 +272,36 @@ def run_all_tests():
     assert "EPYC" in search_res["citations"][0]["excerpt"]
     print(f"18. Dynamic RAG Ingestion & Retrieval Passed: Citation indexed and retrieved ({search_res['citations'][0]['excerpt'][:45]}...).")
 
+    # 19. Test Persistent SQLite REST Endpoints Integration
+    from backend.main import get_stored_user_profile, update_stored_user_profile, save_decision_memo, list_decision_memos
+    test_profile = UserProfileDB(
+        id="default_user",
+        risk_level="aggressive",
+        investment_horizon="long",
+        panic_sell_tendency=0.25,
+        preferred_sectors=["Tech", "Financials"],
+        portfolio_cash=350000.0
+    )
+    saved_prof = run_coro(update_stored_user_profile(test_profile))
+    assert saved_prof["risk_level"] == "aggressive"
+    fetched_prof = run_coro(get_stored_user_profile())
+    assert fetched_prof["risk_level"] == "aggressive"
+    assert fetched_prof["portfolio_cash"] == 350000.0
+
+    test_memo = DecisionMemoDB(
+        id="memo-rest-test-1",
+        ticker="NVDA",
+        company_name="NVIDIA Corp",
+        memo_markdown="# Executive Decision Memo\nVerified via REST API."
+    )
+    saved_memo_res = run_coro(save_decision_memo(test_memo))
+    assert saved_memo_res["ticker"] == "NVDA"
+    all_memos = run_coro(list_decision_memos())
+    assert any(m["id"] == "memo-rest-test-1" for m in all_memos)
+    print("19. Persistent SQLite REST Endpoints Integration Passed: User profile and decision memos verified.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 18 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 19 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

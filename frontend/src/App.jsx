@@ -20,6 +20,8 @@ import {
   getStocks,
   runMultiAgentAnalysis,
   getPortfolio,
+  getStoredUserProfile,
+  updateStoredUserProfile,
 } from './services/api';
 
 import {
@@ -60,14 +62,18 @@ export default function App() {
   // Initialize data on mount
   useEffect(() => {
     async function init() {
-      const [health, stockList, port] = await Promise.all([
+      const [health, stockList, port, storedProf] = await Promise.all([
         checkSystemHealth(),
         getStocks(),
         getPortfolio(),
+        getStoredUserProfile().catch(() => null),
       ]);
       setSystemHealth(health);
       setStocks(stockList);
       setPortfolio(port);
+      if (storedProf && storedProf.risk_level) {
+        setUserProfile(storedProf);
+      }
     }
     init();
   }, []);
@@ -224,7 +230,10 @@ export default function App() {
         isOpen={isVibeCheckOpen}
         onClose={() => setIsVibeCheckOpen(false)}
         userProfile={userProfile}
-        onSaveProfile={(newProf) => setUserProfile(newProf)}
+        onSaveProfile={(newProf) => {
+          setUserProfile(newProf);
+          updateStoredUserProfile(newProf).catch(console.error);
+        }}
       />
 
       {/* Highlight-to-Source RAG Footnote Viewer Modal */}
