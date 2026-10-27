@@ -483,8 +483,25 @@ export default function MultiAgentDebate({
             Autonomous Agent Debate Transcript
           </div>
 
-          {/* Audio Debate Controller */}
-          <div className="flex items-center gap-2">
+          {/* Audio Debate Controller & Visualizer */}
+          <div className="flex items-center gap-3">
+            {isPlayingAudio && (
+              <div className="hidden sm:flex items-center gap-1 px-3 py-1 bg-indigo-950/60 border border-indigo-500/30 rounded-lg">
+                <span className="text-[10px] font-mono font-bold text-indigo-300 mr-1.5">VOICE WAVE:</span>
+                {[12, 22, 16, 26, 18, 14, 24, 18, 10].map((h, i) => (
+                  <span
+                    key={i}
+                    className="w-1 bg-gradient-to-t from-indigo-500 to-violet-400 rounded-full animate-pulse"
+                    style={{
+                      height: `${h}px`,
+                      animationDuration: `${0.35 + (i % 3) * 0.15}s`,
+                      animationDelay: `${i * 0.06}s`
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
             {isPlayingAudio ? (
               <button
                 type="button"

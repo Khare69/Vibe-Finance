@@ -12,6 +12,8 @@ import ResiliencyControls from './components/ResiliencyControls';
 import DeveloperAuditDrawer from './components/DeveloperAuditDrawer';
 import BacktestSimulator from './components/BacktestSimulator';
 import ExportMemoModal from './components/ExportMemoModal';
+import PortfolioRebalancer from './components/PortfolioRebalancer';
+import MacroStressSimulator from './components/MacroStressSimulator';
 
 import {
   checkSystemHealth,
@@ -164,6 +166,22 @@ export default function App() {
                   userProfile={userProfile}
                   activeTicker={selectedTicker}
                   currentPrice={currentPrice}
+                />
+              </div>
+
+              {/* Advanced Risk Tools: Portfolio Rebalancer & Macro Stress Testing */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <PortfolioRebalancer
+                  portfolio={portfolio}
+                  userProfile={userProfile}
+                  onRebalanceComplete={() => {
+                    // Refresh portfolio state on rebalance
+                    getPortfolio().then(setPortfolio).catch(console.error);
+                  }}
+                />
+                <MacroStressSimulator
+                  portfolio={portfolio}
+                  activeTicker={selectedTicker}
                 />
               </div>
 
