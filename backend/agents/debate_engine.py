@@ -1,9 +1,15 @@
 from typing import Dict, Any, List
 
+try:
+    from .llm_client import llm_client
+except (ImportError, ValueError):
+    from agents.llm_client import llm_client
+
 class DebateEngine:
     """
     Synthesizes and arbitrates debates between the Quantitative Agent, Fundamental RAG Agent,
     and Behavioral Risk Manager. Calibrates overall confidence score based on consensus vs conflict.
+    Features hybrid LLM support with dynamic algorithmic templates.
     """
 
     def conduct_debate(
@@ -50,7 +56,6 @@ class DebateEngine:
                 )
 
         # Calibrate confidence score
-        # High alignment = ~85%, high disagreement = ~60-65%
         if rag_timed_out:
             base_confidence = 58
         elif has_disagreement:
@@ -61,105 +66,98 @@ class DebateEngine:
         if stale_data:
             base_confidence = max(40, base_confidence - 20)
 
-        # Craft structured dialogue steps
+        # 1. Attempt LLM dialogue turn generation if Gemini API is available
+        llm_dialogue = llm_client.generate_debate_dialogue(
+            ticker=ticker,
+            quant_result=quant_result,
+            rag_result=rag_result,
+            behavioral_result=behavioral_result,
+            user_risk_profile=user_profile_name
+        )
+
         dialogue_steps: List[Dict[str, str]] = []
-
-        # Quant Agent Dialogue
-        if quant_stance == "BULLISH":
-            q_text = (
-                f"{ticker} has formed a strong momentum pattern above its key moving averages. "
-                f"Technical probabilities and volume acceleration favor an upside continuation."
-            )
-        elif quant_stance == "BEARISH":
-            q_text = (
-                f"{ticker} exhibits technical exhaustion with bearish momentum divergences and "
-                f"downward volume pressure. Downside support is vulnerable."
-            )
+        if llm_dialogue:
+            dialogue_steps = llm_dialogue
         else:
-            q_text = (
-                f"{ticker} is consolidating in a neutral technical range between 50-SMA and 200-SMA. "
-                f"No decisive directional breakout is evident yet."
-            )
-        dialogue_steps.append({"speaker": "Quant Agent", "text": q_text})
-
-        # Fundamental RAG Dialogue
-        if rag_timed_out:
-            r_text = (
-                "Notice: Regulatory filing retrieval timed out. Proceeding strictly on technical data "
-                "with an alert for fundamental uncertainty."
-            )
-        elif rag_stance == "BEARISH":
-            if ticker.upper() == "RELIANCE":
-                r_text = (
-                    "Caution: The Q3 transcript explicitly records CFO commentary regarding an 18% jump "
-                    "in debt service charges and 140 bps retail margin compression. This rally lacks fundamental free cash flow support."
+            # 2. Dynamic Algorithmic Dialogue (Generalized for ANY stock)
+            # Quant Agent Dialogue
+            if quant_stance == "BULLISH":
+                q_text = (
+                    f"{ticker} has formed a strong momentum pattern above its key moving averages. "
+                    f"Technical probabilities and volume acceleration favor an upside continuation."
                 )
-            elif ticker.upper() == "TSLA":
+            elif quant_stance == "BEARISH":
+                q_text = (
+                    f"{ticker} exhibits technical exhaustion with bearish momentum divergences and "
+                    f"downward volume pressure. Downside support is vulnerable."
+                )
+            else:
+                q_text = (
+                    f"{ticker} is consolidating in a neutral technical range between 50-SMA and 200-SMA. "
+                    f"No decisive directional breakout is evident yet."
+                )
+            dialogue_steps.append({"speaker": "Quant Agent", "text": q_text})
+
+            # Fundamental RAG Dialogue (Dynamic citation & finding binding)
+            findings = rag_result.get("key_findings", [])
+            primary_finding = findings[0] if findings else "filing metrics are currently balanced"
+
+            if rag_timed_out:
                 r_text = (
-                    "Caution: Form 10-Q filing documents automotive gross margins shrinking to 14.6% after discounting, "
-                    "with CapEx exceeding $11B draining near-term free cash flow."
+                    f"Notice: Regulatory filing retrieval for {ticker} timed out. Proceeding strictly on technical data "
+                    "with an alert for fundamental uncertainty."
+                )
+            elif rag_stance == "BEARISH":
+                r_text = (
+                    f"Caution: Corporate filing analysis indicates fundamental headwinds for {ticker}: {primary_finding}. "
+                    "This rally lacks free cash flow support."
+                )
+            elif rag_stance == "BULLISH":
+                r_text = (
+                    f"Confirmed: Disclosures reflect robust operational health for {ticker}: {primary_finding}. "
+                    "Balance sheet liquidity provides downside defense."
                 )
             else:
                 r_text = (
-                    "Caution: Corporate filings indicate persistent margin compression and rising operating expenses "
-                    "that challenge valuation sustainability."
+                    f"Fundamental metrics for {ticker} are balanced: {primary_finding}. "
+                    "Near-term guidance is steady without major negative catalysts."
                 )
-        elif rag_stance == "BULLISH":
-            if ticker.upper() == "NVDA":
-                r_text = (
-                    "Confirmed: Form 10-Q filing records Data Center compute revenue expanding 112% YoY with gross margins "
-                    "at 75.1%, confirming sustained secular AI infrastructure tailwinds."
+            dialogue_steps.append({"speaker": "Fundamental RAG Agent", "text": r_text})
+
+            # Behavioral Risk Manager Dialogue
+            if user_profile_name == "conservative":
+                b_text = (
+                    f"Given the user's conservative risk profile and panic-selling sensitivity, a volatile false breakout on {ticker} "
+                    f"could trigger emotional liquidation. I am vetoing the aggressive Buy and capping maximum allocation to 4%."
                 )
-            elif ticker.upper() == "TCS":
-                r_text = (
-                    "Confirmed: Earnings call records robust TCV at $10.2B with 104% net cash conversion and zero net debt, "
-                    "providing solid downside support."
+            elif user_profile_name == "aggressive":
+                b_text = (
+                    f"User possesses high risk tolerance and an aggressive mandate. We can afford volatility exposure on {ticker}, "
+                    f"but recommend staged entries to manage downside risk."
                 )
             else:
-                r_text = (
-                    "Confirmed: Regulatory disclosures reflect resilient revenue expansion, steady margins, "
-                    "and clean balance sheet liquidity."
+                b_text = (
+                    f"For this moderate investor, we need to balance upside participation in {ticker} with capital preservation. "
+                    f"A disciplined accumulate-on-dips strategy is optimal."
                 )
-        else:
-            r_text = (
-                "Fundamental metrics are currently balanced. Near-term revenue guidance is steady without major negative catalysts."
-            )
-        dialogue_steps.append({"speaker": "Fundamental RAG Agent", "text": r_text})
-
-        # Behavioral Risk Manager Dialogue
-        if user_profile_name == "conservative":
-            b_text = (
-                f"Given the user's conservative risk profile and panic-selling sensitivity, a volatile false breakout "
-                f"could trigger emotional liquidation. I am vetoing the aggressive Buy and capping maximum allocation to 4%."
-            )
-        elif user_profile_name == "aggressive":
-            b_text = (
-                f"User possesses high risk tolerance and an aggressive mandate. We can afford volatility exposure, "
-                f"but recommend staged entries to manage downside risk."
-            )
-        else:
-            b_text = (
-                f"For this moderate investor, we need to balance upside participation with capital preservation. "
-                f"A disciplined accumulate-on-dips strategy is optimal."
-            )
-        dialogue_steps.append({"speaker": "Behavioral Risk Manager", "text": b_text})
+            dialogue_steps.append({"speaker": "Behavioral Risk Manager", "text": b_text})
 
         # Resolution summary
         if has_disagreement:
             if quant_stance == "BULLISH" and rag_stance == "BEARISH":
                 resolution_summary = (
-                    f"The technical breakout is tempered by fundamental debt headwinds. For this {user_profile_name} user, "
+                    f"The technical breakout on {ticker} is tempered by fundamental debt/margin headwinds. For this {user_profile_name} user, "
                     f"technical bullishness is restrained, producing a Cautious Hold / Accumulate on Dips stance."
                 )
             else:
                 resolution_summary = (
-                    f"Disagreement between technical indicators and fundamental filings resolved by prioritizing "
+                    f"Disagreement between technical indicators and fundamental filings for {ticker} resolved by prioritizing "
                     f"capital preservation and risk-adjusted positioning for the {user_profile_name} investor."
                 )
         else:
             resolution_summary = (
                 f"Convergence of technical indicators and fundamental signals supports a coherent "
-                f"strategy aligned with the investor's {user_profile_name} risk profile."
+                f"strategy on {ticker} aligned with the investor's {user_profile_name} risk profile."
             )
 
         return {

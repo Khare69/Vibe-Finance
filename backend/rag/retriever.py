@@ -90,4 +90,51 @@ class RAGRetriever:
             }
         return timeline
 
+    def ingest_document(
+        self,
+        ticker: str,
+        document_title: str,
+        section: str,
+        content: str,
+        source_type: str = "USER_UPLOAD"
+    ) -> List[Dict[str, Any]]:
+        """
+        Chunks and indexes user-provided filing text or SEC/SEBI transcripts on the fly.
+        """
+        ticker_up = ticker.upper()
+        paragraphs = [p.strip() for p in re.split(r'\n\n|\.\s+', content) if len(p.strip()) > 30]
+        if not paragraphs:
+            paragraphs = [content.strip()]
+        
+        new_docs = []
+        for i, para in enumerate(paragraphs[:5]):
+            doc_id = f"{ticker_up.lower()}-user-cite-{int(time.time())}-{i}"
+            words = re.findall(r'\b[a-zA-Z]{4,}\b', para.lower())
+            freq: Dict[str, int] = {}
+            for w in words:
+                freq[w] = freq.get(w, 0) + 1
+            top_kw = [k for k, _ in sorted(freq.items(), key=lambda x: x[1], reverse=True)[:5]]
+
+            negative_words = {"debt", "loss", "headwind", "margin", "compression", "decline", "slowdown", "capex"}
+            positive_words = {"growth", "profit", "expansion", "record", "robust", "dividend", "cash"}
+            neg_count = sum(1 for w in words if w in negative_words)
+            pos_count = sum(1 for w in words if w in positive_words)
+            sentiment = "positive" if pos_count > neg_count else ("negative" if neg_count > pos_count else "neutral")
+
+            doc_entry = {
+                "id": doc_id,
+                "ticker": ticker_up,
+                "document_title": document_title,
+                "source_type": source_type,
+                "section": f"{section} (Chunk {i+1})",
+                "excerpt": para[:300],
+                "sentiment": sentiment,
+                "keywords": top_kw,
+                "relevance_base": 0.90
+            }
+            self.documents.append(doc_entry)
+            new_docs.append(doc_entry)
+
+        return new_docs
+
 rag_retriever = RAGRetriever()

@@ -238,8 +238,42 @@ def run_all_tests():
     assert latest_bar["close"] > 0
     print(f"16. Candlestick History Endpoint Passed: {len(history)} OHLCV bars returned for NVDA.")
 
+    # 17. Test Generalized Dynamic Debate on Arbitrary Ticker
+    from backend.agents.debate_engine import debate_engine
+    debate_res = debate_engine.conduct_debate(
+        ticker="AMD",
+        quant_result={"stance": "BULLISH", "score": 82, "signals": ["RSI at 64.5", "50-SMA Golden Cross"]},
+        rag_result={"stance": "BEARISH", "score": 38, "timed_out": False, "key_findings": ["Client PC revenue compressed 12%"]},
+        behavioral_result={"stance": "CAUTION", "score": 45, "user_risk_profile": "conservative", "behavioral_adjustments": ["Cap size"]}
+    )
+    assert debate_res["has_disagreement"] is True
+    assert "AMD" in debate_res["resolution_summary"]
+    assert any("AMD" in d["text"] for d in debate_res["dialogue_steps"])
+    assert any("Client PC revenue compressed 12%" in d["text"] for d in debate_res["dialogue_steps"])
+    print("17. Dynamic Generalized Debate Passed: Arbitrary ticker AMD generated coherent adversarial dialogue.")
+
+    # 18. Test Dynamic RAG Document Ingestion & Retrieval
+    from backend.main import upload_rag_document, UploadDocumentRequest
+    upload_req = UploadDocumentRequest(
+        ticker="AMD",
+        document_title="AMD Form 10-K Annual Report",
+        section="Item 7 MD&A",
+        content="Data Center enterprise EPYC processor sales expanded 122% YoY, driving record server market share gains."
+    )
+    upload_res = run_coro(upload_rag_document(upload_req))
+    assert upload_res["status"] == "indexed"
+    assert upload_res["ticker"] == "AMD"
+    assert upload_res["chunks_created"] >= 1
+
+    # Verify search finds the uploaded citation
+    from backend.rag.retriever import rag_retriever
+    search_res = rag_retriever.search("AMD", query="data center server epyc market share", top_k=2)
+    assert len(search_res["citations"]) >= 1
+    assert "EPYC" in search_res["citations"][0]["excerpt"]
+    print(f"18. Dynamic RAG Ingestion & Retrieval Passed: Citation indexed and retrieved ({search_res['citations'][0]['excerpt'][:45]}...).")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 16 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 18 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

@@ -101,6 +101,13 @@ class BacktestRequest(BaseModel):
     historical_date: str = Field(default="2025-10-15")
     holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
+class UploadDocumentRequest(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+    document_title: str = Field(default="Corporate Filing")
+    section: str = Field(default="Management Discussion")
+    content: str = Field(min_length=10)
+    source_type: Optional[str] = "USER_UPLOAD"
+
 
 # --- Endpoints ---
 
@@ -291,3 +298,19 @@ async def save_decision_memo(memo: DecisionMemoDB):
 @app.get("/api/memos")
 async def list_decision_memos():
     return [m.model_dump() for m in db_get_memos()]
+
+@app.post("/api/rag/upload")
+async def upload_rag_document(req: UploadDocumentRequest):
+    chunks = rag_retriever.ingest_document(
+        ticker=req.ticker,
+        document_title=req.document_title,
+        section=req.section,
+        content=req.content,
+        source_type=req.source_type or "USER_UPLOAD"
+    )
+    return {
+        "status": "indexed",
+        "ticker": req.ticker.upper(),
+        "chunks_created": len(chunks),
+        "total_corpus_documents": len(rag_retriever.documents)
+    }
