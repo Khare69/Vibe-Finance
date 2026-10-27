@@ -118,6 +118,10 @@ async def get_health():
 async def list_stocks():
     return market_service.list_tracked_stocks()
 
+@app.get("/api/stocks/{ticker}/history")
+async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):
+    return market_service.get_history(ticker=ticker, timeframe=timeframe or "1M")
+
 @app.post("/api/analyze")
 async def analyze_stock(req: AnalyzeRequest):
     overall_start = time.perf_counter()

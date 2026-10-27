@@ -215,8 +215,31 @@ def run_all_tests():
     assert any(m.id == "memo-test-1" for m in memos)
     print("14. Watchlist & Decision Memo Persistence Passed: Stored and queried cleanly.")
 
+    # 15. Test Real Mathematical Technical Indicators Engine
+    from backend.data.market_service import market_service
+    sample_series = [100.0 + (i * 0.8) + ((i % 4 - 1.5) * 1.5) for i in range(50)]
+    sma20 = market_service.calculate_sma(sample_series, 20)
+    ema20 = market_service.calculate_ema(sample_series, 20)
+    rsi14 = market_service.calculate_rsi(sample_series, 14)
+    macd = market_service.calculate_macd(sample_series)
+    assert sma20 > 100.0
+    assert ema20 > 100.0
+    assert 0.0 <= rsi14 <= 100.0
+    assert "line" in macd and "signal" in macd and "hist" in macd
+    print(f"15. Technical Indicators Engine Passed: RSI(14)={rsi14}, SMA(20)={sma20}, MACD Hist={macd['hist']}")
+
+    # 16. Test Candlestick History OHLCV Endpoint
+    from backend.main import get_stock_history
+    history = run_coro(get_stock_history(ticker="NVDA", timeframe="1M"))
+    assert len(history) >= 28
+    latest_bar = history[-1]
+    assert "open" in latest_bar and "high" in latest_bar and "low" in latest_bar and "close" in latest_bar and "volume" in latest_bar
+    assert latest_bar["high"] >= latest_bar["low"]
+    assert latest_bar["close"] > 0
+    print(f"16. Candlestick History Endpoint Passed: {len(history)} OHLCV bars returned for NVDA.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 14 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 16 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":
