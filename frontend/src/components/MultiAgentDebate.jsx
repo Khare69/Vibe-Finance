@@ -25,13 +25,20 @@ export default function MultiAgentDebate({
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [activeSpeechIdx, setActiveSpeechIdx] = useState(null);
 
+  // Cancel speech synthesis on unmount or when analysis/ticker changes
   useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(false);
+    setActiveSpeechIdx(null);
+
     return () => {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
-  }, []);
+  }, [analysis?.ticker]);
 
   if (!analysis) return null;
 

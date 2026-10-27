@@ -35,7 +35,7 @@ export default function PriceBanner({ analysis, isStale, isRagTimeout }) {
               Market Feed Degraded: Fallback EOD Active
             </span>
             <span>
-              Real-time websocket feed disconnected or delayed. Using previous close EOD metrics. An automatic -18 point confidence penalty has been applied to consensus scoring.
+              Real-time websocket feed disconnected or delayed. Using previous close EOD metrics. An automatic -{price_data?.confidence_penalty ? Math.round(price_data.confidence_penalty) : 25} point confidence penalty has been applied to consensus scoring.
             </span>
           </div>
         </div>

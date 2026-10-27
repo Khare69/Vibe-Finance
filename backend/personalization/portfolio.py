@@ -97,13 +97,32 @@ class PortfolioService:
             "allocation_pct": cash_pct
         })
 
-        # Concentration heatmap
-        concentration_heatmap = [
-            {"name": "Tech Sector", "concentration_pct": 52.0, "risk_level": "HIGH", "threshold_pct": 40.0},
-            {"name": "Energy Sector", "concentration_pct": 28.5, "risk_level": "MODERATE", "threshold_pct": 30.0},
-            {"name": "Financials Sector", "concentration_pct": 13.5, "risk_level": "LOW", "threshold_pct": 25.0},
-            {"name": "Single Stock Max (RELIANCE)", "concentration_pct": 28.5, "risk_level": "HIGH", "threshold_pct": 15.0}
-        ]
+        # Dynamic concentration heatmap
+        concentration_heatmap = []
+        for alloc in sector_allocations:
+            if alloc["sector"] == "Cash":
+                continue
+            sec_name = alloc["sector"]
+            pct = alloc["allocation_pct"]
+            thresh = 40.0 if sec_name == "Tech" else (30.0 if sec_name == "Energy" else 25.0)
+            risk_lvl = "HIGH" if pct > thresh else ("MODERATE" if pct > (thresh * 0.7) else "LOW")
+            concentration_heatmap.append({
+                "name": f"{sec_name} Sector",
+                "concentration_pct": pct,
+                "risk_level": risk_lvl,
+                "threshold_pct": thresh
+            })
+        
+        # Single stock max concentration
+        if holdings:
+            max_h = max(holdings, key=lambda h: h["market_value"])
+            max_stock_pct = round((max_h["market_value"] / total_portfolio_value) * 100, 1)
+            concentration_heatmap.append({
+                "name": f"Single Stock Max ({max_h['ticker']})",
+                "concentration_pct": max_stock_pct,
+                "risk_level": "HIGH" if max_stock_pct > 20.0 else ("MODERATE" if max_stock_pct > 12.0 else "LOW"),
+                "threshold_pct": 15.0
+            })
 
         return {
             "total_value": round(total_portfolio_value, 2),
@@ -118,8 +137,8 @@ class PortfolioService:
     def simulate_trade(self, trade_req: Dict[str, Any]) -> Dict[str, Any]:
         ticker = trade_req.get("ticker", "TSLA").upper()
         action = trade_req.get("action", "BUY").upper()
-        quantity = int(trade_req.get("quantity", 10))
-        price = float(trade_req.get("price", 240.0))
+        quantity = max(1, int(trade_req.get("quantity", 10)))
+        price = max(0.01, float(trade_req.get("price", 240.0)))
         user_prof = trade_req.get("user_profile") or {}
         risk_level = user_prof.get("risk_level", "conservative")
         if risk_level:
@@ -157,24 +176,40 @@ class PortfolioService:
         vol = stock_volatilities.get(ticker, 28)
         sector = stock_sectors.get(ticker, "Tech")
 
-        current_tech_pct = 52.0
-        current_beta = 0.95
+        # Dynamic portfolio baseline
+        portfolio_state = self.get_portfolio()
+        current_total = portfolio_state["total_value"]
+        current_invested = portfolio_state["invested_value"]
+        current_beta = portfolio_state["portfolio_beta"]
 
-        # Trade delta computation
-        trade_amount = quantity * price
-        if sector == "Tech":
-            projected_tech_pct = round(current_tech_pct + (trade_amount / 500000.0) * 100 * 0.45 + 8.5, 1)
-        else:
-            projected_tech_pct = round(current_tech_pct - 1.5, 1)
+        tech_alloc = next((s for s in portfolio_state["sector_allocations"] if s["sector"] == "Tech"), None)
+        current_tech_pct = tech_alloc["allocation_pct"] if tech_alloc else 46.5
+        current_tech_val = tech_alloc["value"] if tech_alloc else (current_total * current_tech_pct / 100.0)
 
-        projected_beta = round(current_beta + (beta - current_beta) * 0.28, 2)
+        # Multi-currency normalization (USD equities converted to INR base portfolio)
+        usd_to_inr = 83.5
+        is_usd = ticker in ["TSLA", "NVDA", "AAPL"]
+        trade_amount = quantity * price * (usd_to_inr if is_usd else 1.0)
+
+        if action == "BUY":
+            new_total = current_total + trade_amount
+            new_invested = current_invested + trade_amount
+            new_tech_val = (current_tech_val + trade_amount) if sector == "Tech" else current_tech_val
+            projected_tech_pct = round((new_tech_val / new_total) * 100, 1)
+            projected_beta = round(((current_invested * current_beta) + (trade_amount * beta)) / new_invested, 2)
+        else: # SELL
+            new_total = max(1.0, current_total - trade_amount)
+            new_invested = max(1.0, current_invested - trade_amount)
+            new_tech_val = max(0.0, current_tech_val - trade_amount) if sector == "Tech" else current_tech_val
+            projected_tech_pct = round((new_tech_val / new_total) * 100, 1)
+            projected_beta = round(max(0.4, current_beta - ((beta - current_beta) * 0.15)), 2)
 
         # Evaluate if nudge warning triggers
         warning_triggered = False
         nudge_message = ""
         suggested_alternative = ""
 
-        if risk_level == "conservative" and (beta > 1.2 or vol > 35 or projected_tech_pct > 55.0):
+        if risk_level == "conservative" and (beta > 1.2 or vol > 35 or projected_tech_pct > 50.0):
             warning_triggered = True
             nudge_message = (
                 f"Hold on! Your profile is Conservative, but {ticker} has an annualized volatility of {vol}% "

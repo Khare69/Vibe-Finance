@@ -50,30 +50,30 @@ app.add_middleware(
 # --- Pydantic Request Models ---
 
 class UserProfileModel(BaseModel):
-    risk_level: Optional[str] = "conservative"
-    investment_horizon: Optional[str] = "medium"
-    panic_sell_tendency: Optional[float] = 0.8
-    preferred_sectors: Optional[List[str]] = ["Energy", "Tech"]
-    portfolio_cash: Optional[float] = 250000.0
+    risk_level: Optional[str] = Field(default="conservative")
+    investment_horizon: Optional[str] = Field(default="medium")
+    panic_sell_tendency: Optional[float] = Field(default=0.8, ge=0.0, le=1.0)
+    preferred_sectors: Optional[List[str]] = Field(default_factory=lambda: ["Energy", "Tech"])
+    portfolio_cash: Optional[float] = Field(default=250000.0, ge=0.0)
 
 class AnalyzeRequest(BaseModel):
-    ticker: str = "RELIANCE"
+    ticker: str = Field(default="RELIANCE", min_length=1, max_length=20)
     user_profile: Optional[UserProfileModel] = None
-    explain_mode: Optional[str] = "beginner"
+    explain_mode: Optional[str] = Field(default="beginner")
     simulated_stale_data: Optional[bool] = False
     simulated_rag_timeout: Optional[bool] = False
 
 class SimulateTradeRequest(BaseModel):
-    ticker: str = "TSLA"
-    action: str = "BUY"
-    quantity: int = 10
-    price: float = 240.0
+    ticker: str = Field(default="TSLA", min_length=1, max_length=20)
+    action: str = Field(default="BUY")
+    quantity: int = Field(default=10, gt=0)
+    price: float = Field(default=240.0, gt=0.0)
     user_profile: Optional[Dict[str, Any]] = None
 
 class BacktestRequest(BaseModel):
-    ticker: str = "NVDA"
-    historical_date: str = "2025-10-15"
-    holding_days: Optional[int] = 90
+    ticker: str = Field(default="NVDA", min_length=1, max_length=20)
+    historical_date: str = Field(default="2025-10-15")
+    holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
 
 # --- Endpoints ---

@@ -1,4 +1,3 @@
-import asyncio
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -16,18 +15,27 @@ from backend.main import (
     UserProfileModel
 )
 
-async def run_all_tests():
+def run_coro(coro):
+    """Executes a coroutine cleanly without requiring an external IOCP Proactor network loop."""
+    try:
+        return coro.send(None)
+    except StopIteration as e:
+        return e.value
+    except AttributeError:
+        return coro
+
+def run_all_tests():
     print("Running Vibe Finance Multi-Agent Backend Tests...\n")
 
     # 1. Test Health
-    health = await get_health()
+    health = run_coro(get_health())
     assert health["status"] == "healthy"
     assert health["version"] == "1.0.0"
     assert health["rag_corpus_documents"] >= 6
     print("1. Health Endpoint Passed:", health)
 
     # 2. Test Stocks
-    stocks = await list_stocks()
+    stocks = run_coro(list_stocks())
     assert len(stocks) >= 6
     tickers = [s["ticker"] for s in stocks]
     assert "RELIANCE" in tickers
@@ -49,7 +57,7 @@ async def run_all_tests():
         simulated_stale_data=False,
         simulated_rag_timeout=False
     )
-    res = await analyze_stock(req)
+    res = run_coro(analyze_stock(req))
     assert res["ticker"] == "RELIANCE"
     assert res["price_data"]["feed_status"] == "LIVE"
     assert res["agents"]["quant"]["stance"] == "BULLISH"
@@ -69,7 +77,7 @@ async def run_all_tests():
         simulated_stale_data=True,
         simulated_rag_timeout=False
     )
-    res_stale = await analyze_stock(req_stale)
+    res_stale = run_coro(analyze_stock(req_stale))
     assert res_stale["price_data"]["feed_status"] == "STALE_FALLBACK_EOD"
     assert res_stale["price_data"]["confidence_penalty"] == 25.0
     assert res_stale["telemetry"]["degraded_data"] is True
@@ -83,7 +91,7 @@ async def run_all_tests():
         simulated_stale_data=False,
         simulated_rag_timeout=True
     )
-    res_timeout = await analyze_stock(req_timeout)
+    res_timeout = run_coro(analyze_stock(req_timeout))
     assert res_timeout["agents"]["rag"]["timed_out"] is True
     assert res_timeout["synthesis"]["weight_breakdown"]["fundamentals"] == 0
     assert "pending" in res_timeout["synthesis"]["headline"].lower()
@@ -98,7 +106,7 @@ async def run_all_tests():
         price=240.0,
         user_profile={"risk_level": "conservative"}
     )
-    trade_res = await simulate_trade(trade_req)
+    trade_res = run_coro(simulate_trade(trade_req))
     assert trade_res["warning_triggered"] is True
     assert "Conservative" in trade_res["nudge_message"]
     assert trade_res["portfolio_delta"]["projected_tech_pct"] > trade_res["portfolio_delta"]["current_tech_pct"]
@@ -106,7 +114,7 @@ async def run_all_tests():
     print("6. Simulate Trade Nudge Passed: Warning triggered with delta projections.")
 
     # 7. Test Portfolio
-    portfolio = await get_portfolio()
+    portfolio = run_coro(get_portfolio())
     assert portfolio["total_value"] > 0
     assert len(portfolio["holdings"]) >= 4
     assert len(portfolio["sector_allocations"]) >= 3
@@ -119,7 +127,7 @@ async def run_all_tests():
         historical_date="2025-10-15",
         holding_days=90
     )
-    bt_res = await run_backtest(bt_req)
+    bt_res = run_coro(run_backtest(bt_req))
     assert bt_res["historical_date"] == "2025-10-15"
     assert bt_res["entry_price"] == 132.50
     assert bt_res["exit_price"] == 178.20
@@ -128,9 +136,32 @@ async def run_all_tests():
     assert bt_res["was_profitable"] is True
     print("8. Backtest Endpoint Passed: Replayed recommendation and return matching benchmark.")
 
+    # 9. Test Uncataloged Ticker RAG Isolation (No cross-contamination)
+    uncataloged_req = AnalyzeRequest(
+        ticker="CUSTOMTECH",
+        user_profile=profile
+    )
+    uncataloged_res = run_coro(analyze_stock(uncataloged_req))
+    assert uncataloged_res["ticker"] == "CUSTOMTECH"
+    # Citations must be empty for an uncataloged ticker, NOT populated with Reliance filings
+    assert len(uncataloged_res["agents"]["rag"]["citations"]) == 0
+    print("9. Uncataloged Ticker Isolation Passed: 0 cross-contaminating citations returned.")
+
+    # 10. Test Input Validation Boundary Checks
+    try:
+        invalid_trade = SimulateTradeRequest(
+            ticker="TSLA",
+            quantity=-5, # Invalid negative quantity
+            price=240.0
+        )
+        assert False, "Should have thrown ValidationError on negative quantity"
+    except Exception as e:
+        assert "greater than 0" in str(e) or "Input should be greater than 0" in str(e)
+    print("10. Input Validation Passed: Negative trade quantity rejected cleanly.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 8 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 10 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":
-    asyncio.run(run_all_tests())
+    run_all_tests()

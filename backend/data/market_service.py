@@ -92,7 +92,7 @@ class MarketService:
         },
         "TSLA": {
             "name": "Tesla, Inc.",
-            "sector": "Consumer Discretionary",
+            "sector": "Tech",
             "exchange": "NASDAQ",
             "currency": "USD",
             "base_price": 240.00,

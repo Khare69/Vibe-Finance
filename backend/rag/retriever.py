@@ -26,8 +26,13 @@ class RAGRetriever:
         # Filter by ticker first
         matched_docs = [doc for doc in self.documents if doc.get("ticker") == ticker_up]
         if not matched_docs:
-            # Fallback documents if ticker not explicitly cataloged
-            matched_docs = [doc for doc in self.documents if doc.get("ticker") == "RELIANCE"]
+            elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 45)
+            return {
+                "citations": [],
+                "documents_scanned": 0,
+                "retrieval_ms": elapsed_ms,
+                "status": "UNCATALOGED_CORPUS"
+            }
 
         results = []
         query_tokens = set(re.findall(r'\w+', query.lower())) if query else set()

@@ -72,13 +72,13 @@ export async function runMultiAgentAnalysis({
     // Handle Stale Live Data Simulation
     if (simulatedStaleData) {
       cloned.price_data.feed_status = 'STALE_FALLBACK_EOD';
-      cloned.price_data.confidence_penalty = 18.0;
+      cloned.price_data.confidence_penalty = 25.0;
       cloned.telemetry.degraded_data = true;
       cloned.telemetry.degraded_reason =
-        'Live streaming socket disconnected: Utilizing EOD cache snapshot (-18 confidence penalty applied)';
+        'Live streaming socket disconnected: Utilizing EOD cache snapshot (-25 confidence penalty applied)';
       cloned.debate.confidence_calibration_score = Math.max(
         25,
-        cloned.debate.confidence_calibration_score - 18
+        cloned.debate.confidence_calibration_score - 25
       );
       cloned.telemetry.confidence_score =
         cloned.debate.confidence_calibration_score;
