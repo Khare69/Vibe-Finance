@@ -18,6 +18,19 @@ try:
     from .personalization.portfolio import portfolio_service
     from .backtest.simulator import backtest_simulator
     from .observability.audit_logger import audit_logger
+    from .database import (
+        get_user_profile as db_get_user_profile,
+        upsert_user_profile as db_upsert_user_profile,
+        get_all_holdings as db_get_all_holdings,
+        upsert_holding as db_upsert_holding,
+        delete_holding as db_delete_holding,
+        get_watchlist as db_get_watchlist,
+        add_to_watchlist as db_add_to_watchlist,
+        remove_from_watchlist as db_remove_from_watchlist,
+        save_memo as db_save_memo,
+        get_memos as db_get_memos
+    )
+    from .models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
 except (ImportError, ValueError):
     from data.market_service import market_service
     from rag.corpus import RAG_DOCUMENTS
@@ -31,6 +44,19 @@ except (ImportError, ValueError):
     from personalization.portfolio import portfolio_service
     from backtest.simulator import backtest_simulator
     from observability.audit_logger import audit_logger
+    from database import (
+        get_user_profile as db_get_user_profile,
+        upsert_user_profile as db_upsert_user_profile,
+        get_all_holdings as db_get_all_holdings,
+        upsert_holding as db_upsert_holding,
+        delete_holding as db_delete_holding,
+        get_watchlist as db_get_watchlist,
+        add_to_watchlist as db_add_to_watchlist,
+        remove_from_watchlist as db_remove_from_watchlist,
+        save_memo as db_save_memo,
+        get_memos as db_get_memos
+    )
+    from models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
 
 app = FastAPI(
     title="Vibe Finance Multi-Agent API",
@@ -213,3 +239,51 @@ async def run_backtest(req: BacktestRequest):
 @app.get("/api/telemetry/recent")
 async def get_telemetry_logs():
     return audit_logger.get_recent_logs()
+
+# --- SQLite Persistent CRUD Endpoints ---
+
+@app.get("/api/user-profile")
+async def get_stored_user_profile():
+    return db_get_user_profile().model_dump()
+
+@app.put("/api/user-profile")
+async def update_stored_user_profile(profile: UserProfileDB):
+    return db_upsert_user_profile(profile).model_dump()
+
+@app.get("/api/portfolio/holdings")
+async def get_stored_holdings():
+    return [h.model_dump() for h in db_get_all_holdings()]
+
+@app.post("/api/portfolio/holdings")
+async def upsert_stored_holding(holding: PortfolioHoldingDB):
+    return db_upsert_holding(holding).model_dump()
+
+@app.delete("/api/portfolio/holdings/{ticker}")
+async def delete_stored_holding(ticker: str):
+    success = db_delete_holding(ticker)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Holding {ticker} not found")
+    return {"status": "deleted", "ticker": ticker.upper()}
+
+@app.get("/api/watchlist")
+async def get_user_watchlist():
+    return [w.model_dump() for w in db_get_watchlist()]
+
+@app.post("/api/watchlist")
+async def add_item_to_watchlist(item: WatchlistDB):
+    return db_add_to_watchlist(item).model_dump()
+
+@app.delete("/api/watchlist/{ticker}")
+async def remove_item_from_watchlist(ticker: str):
+    success = db_remove_from_watchlist(ticker)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Watchlist item {ticker} not found")
+    return {"status": "deleted", "ticker": ticker.upper()}
+
+@app.post("/api/memos")
+async def save_decision_memo(memo: DecisionMemoDB):
+    return db_save_memo(memo).model_dump()
+
+@app.get("/api/memos")
+async def list_decision_memos():
+    return [m.model_dump() for m in db_get_memos()]

@@ -159,8 +159,64 @@ def run_all_tests():
         assert "greater than 0" in str(e) or "Input should be greater than 0" in str(e)
     print("10. Input Validation Passed: Negative trade quantity rejected cleanly.")
 
+    # 11. Test SQLite Database Initialization & Default Seeds
+    import backend.database as db
+    from backend.models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+    db.init_db()
+    db_holdings = db.get_all_holdings()
+    assert len(db_holdings) >= 4
+    db_prof = db.get_user_profile()
+    assert db_prof.risk_level in ["conservative", "moderate", "aggressive"]
+    print("11. Database Seeds Passed: Verified persistent holdings and profile tables.")
+
+    # 12. Test User Profile Persistence
+    orig_risk = db_prof.risk_level
+    db.upsert_user_profile(UserProfileDB(risk_level="aggressive", portfolio_cash=300000.0))
+    updated_p = db.get_user_profile()
+    assert updated_p.risk_level == "aggressive"
+    assert updated_p.portfolio_cash == 300000.0
+    # Restore
+    db.upsert_user_profile(UserProfileDB(risk_level=orig_risk, portfolio_cash=250000.0))
+    assert db.get_user_profile().risk_level == orig_risk
+    print("12. User Profile Persistence Passed: Write & read verified.")
+
+    # 13. Test Portfolio Holding CRUD
+    test_h = PortfolioHoldingDB(
+        ticker="TESTSTOCK",
+        company_name="Test Stock Inc.",
+        shares=10.0,
+        avg_cost=150.0,
+        currency="USD",
+        sector="Tech",
+        beta=1.2
+    )
+    db.upsert_holding(test_h)
+    fetched_tickers = [h.ticker for h in db.get_all_holdings()]
+    assert "TESTSTOCK" in fetched_tickers
+    db.delete_holding("TESTSTOCK")
+    fetched_after = [h.ticker for h in db.get_all_holdings()]
+    assert "TESTSTOCK" not in fetched_after
+    print("13. Portfolio Holding CRUD Passed: Add and delete verified.")
+
+    # 14. Test Watchlist & Decision Memo Persistence
+    db.add_to_watchlist(WatchlistDB(ticker="NVDA", target_price=130.0, notes="Wait for support"))
+    wl = db.get_watchlist()
+    assert any(w.ticker == "NVDA" for w in wl)
+    db.remove_from_watchlist("NVDA")
+
+    memo = DecisionMemoDB(
+        id="memo-test-1",
+        ticker="RELIANCE",
+        company_name="Reliance Industries",
+        memo_markdown="# Test Memo Content"
+    )
+    db.save_memo(memo)
+    memos = db.get_memos()
+    assert any(m.id == "memo-test-1" for m in memos)
+    print("14. Watchlist & Decision Memo Persistence Passed: Stored and queried cleanly.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 10 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 14 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

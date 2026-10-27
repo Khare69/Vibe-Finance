@@ -1,17 +1,21 @@
 from typing import Dict, Any, List
 try:
     from .profiler import user_profiler
+    from ..database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
+    from ..data.market_service import market_service
 except (ImportError, ValueError):
     from personalization.profiler import user_profiler
+    from database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
+    from data.market_service import market_service
 
 class PortfolioService:
     """
     Manages current portfolio holdings, risk heatmap computation,
-    and trade impact simulations with behavioral nudge warnings.
+    and trade impact simulations with behavioral nudge warnings backed by SQLite.
     """
 
     def __init__(self):
-        # Base realistic portfolio holdings
+        # Base realistic portfolio holdings fallback
         self.default_holdings = [
             {
                 "ticker": "RELIANCE",
@@ -23,6 +27,7 @@ class PortfolioService:
                 "pnl_percent": 4.61,
                 "sector": "Energy",
                 "beta": 0.88,
+                "currency": "INR",
                 "weight_pct": 28.5
             },
             {
@@ -35,6 +40,7 @@ class PortfolioService:
                 "pnl_percent": 1.69,
                 "sector": "Tech",
                 "beta": 0.72,
+                "currency": "INR",
                 "weight_pct": 23.5
             },
             {
@@ -43,10 +49,11 @@ class PortfolioService:
                 "shares": 35,
                 "avg_cost": 215.00,
                 "current_price": 234.50,
-                "market_value": 68450.0, # normalized INR equivalent approx
+                "market_value": 68450.0,
                 "pnl_percent": 9.07,
                 "sector": "Tech",
                 "beta": 1.05,
+                "currency": "USD",
                 "weight_pct": 28.5
             },
             {
@@ -59,14 +66,55 @@ class PortfolioService:
                 "pnl_percent": 3.35,
                 "sector": "Financials",
                 "beta": 0.92,
+                "currency": "INR",
                 "weight_pct": 19.5
             }
         ]
 
     def get_portfolio(self) -> Dict[str, Any]:
-        holdings = self.default_holdings
+        holdings = []
+        try:
+            db_holdings = get_all_holdings()
+            if db_holdings:
+                for h in db_holdings:
+                    stock_info = market_service.get_stock_info(h.ticker)
+                    current_price = stock_info["base_price"] if stock_info else h.avg_cost
+                    is_usd = h.currency == "USD"
+                    # Normalized market value in INR
+                    market_val = h.shares * current_price * (83.5 if is_usd else 1.0)
+                    pnl_pct = round(((current_price - h.avg_cost) / h.avg_cost) * 100, 2)
+                    holdings.append({
+                        "ticker": h.ticker,
+                        "company_name": h.company_name,
+                        "shares": h.shares,
+                        "avg_cost": h.avg_cost,
+                        "current_price": current_price,
+                        "market_value": round(market_val, 2),
+                        "pnl_percent": pnl_pct,
+                        "sector": h.sector,
+                        "beta": h.beta,
+                        "currency": h.currency,
+                        "weight_pct": 0.0
+                    })
+        except Exception:
+            pass
+
+        if not holdings:
+            holdings = self.default_holdings
+
         total_market_value = sum(h["market_value"] for h in holdings)
+        
+        # Calculate dynamic weight %
+        for h in holdings:
+            h["weight_pct"] = round((h["market_value"] / total_market_value) * 100, 1) if total_market_value > 0 else 0.0
+
         cash = 104025.0
+        try:
+            user_p = get_user_profile()
+            cash = user_p.portfolio_cash
+        except Exception:
+            pass
+
         total_portfolio_value = total_market_value + cash
 
         # Calculate exact sector percentages
