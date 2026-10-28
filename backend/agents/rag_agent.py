@@ -1,73 +1,22 @@
 import time
-from typing import Dict, Any, List
+import re
+from typing import Dict, Any, List, Optional
+
 try:
     from ..rag.retriever import rag_retriever
+    from .llm_client import llm_client
 except (ImportError, ValueError):
     from rag.retriever import rag_retriever
+    from agents.llm_client import llm_client
+
 
 class RAGAgent:
     """
     Fundamental Researcher RAG Agent.
-    Parses corporate filings, SEBI/SEC earnings call transcripts, and extracts
-    concrete citations with page/section numbers and sentiment scores.
+    Retrieves vector citations from corporate filings and SEBI/SEC earnings call transcripts.
+    Dynamically extracts scores, stance, and grounded findings via LLM synthesis
+    or deterministic evidence weighting without hardcoded profile dictionaries.
     """
-
-    TICKER_FUNDAMENTAL_PROFILES = {
-        "RELIANCE": {
-            "score": 41,
-            "stance": "BEARISH",
-            "key_findings": [
-                "Management highlighted 18% increase in capex debt servicing costs in Q3 transcript",
-                "Retail division margin compression of 140 bps cited due to discounting pressure",
-                "Substantial working capital drain observed in recent regulatory filing"
-            ]
-        },
-        "TCS": {
-            "score": 76,
-            "stance": "BULLISH",
-            "key_findings": [
-                "Deal win TCV robust at $10.2B led by North America BFSI revival",
-                "Operating cash flow conversion at 104% of net profit ensures dividend security",
-                "Zero net debt balance sheet insulation against macro headwinds"
-            ]
-        },
-        "INFY": {
-            "score": 48,
-            "stance": "NEUTRAL",
-            "key_findings": [
-                "Discretionary client transformation programs delayed, narrowing constant currency guidance",
-                "Sequential operating margin compressed by 80 bps due to staggered wage hikes",
-                "Large deal pipeline remains healthy despite elongation of decision cycles"
-            ]
-        },
-        "NVDA": {
-            "score": 92,
-            "stance": "BULLISH",
-            "key_findings": [
-                "Data Center compute revenue grew 112% YoY with sustained AI cluster adoption",
-                "Gross margins held firm at 75.1% defying supplier cost increases",
-                "Blackwell architecture supply fully committed through next four fiscal quarters"
-            ]
-        },
-        "AAPL": {
-            "score": 70,
-            "stance": "BULLISH",
-            "key_findings": [
-                "Services segment achieved historic record revenue of $25.8B with 2.2B active devices",
-                "Double-digit growth across emerging markets (India, LatAm) offset China hardware softness",
-                "Apple Intelligence rollout catalyzing higher-than-average replacement demand"
-            ]
-        },
-        "TSLA": {
-            "score": 34,
-            "stance": "BEARISH",
-            "key_findings": [
-                "Automotive gross margins ex-regulatory credits declined to 14.6% following price cuts",
-                "AI compute and Dojo CapEx commitments exceeding $11B create near-term FCF pressure",
-                "Regulatory scrutiny and delayed Robotaxi mass commercialization timelines"
-            ]
-        }
-    }
 
     def analyze(self, ticker: str, simulated_rag_timeout: bool = False) -> Dict[str, Any]:
         start_time = time.perf_counter()
@@ -82,30 +31,49 @@ class RAGAgent:
                 "timed_out": True,
                 "key_findings": [
                     "Fundamental RAG retrieval timed out after 5000ms threshold; fundamental analysis pending.",
-                    "Proceeding with technical momentum and risk constraints."
+                    "Proceeding with technical momentum and risk constraints only."
                 ],
                 "citations": []
             }
 
-        # Query retriever for citations
-        search_res = rag_retriever.search(ticker_up, query="capex debt margin growth cash flow revenue", top_k=3)
-        citations = search_res["citations"]
+        # 1. Search Vector Knowledge Base for filings
+        search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
+        search_res = rag_retriever.search(ticker=ticker_up, query=search_query, top_k=3)
+        citations = search_res.get("citations", [])
 
-        profile = self.TICKER_FUNDAMENTAL_PROFILES.get(ticker_up, {
-            "score": 50,
-            "stance": "NEUTRAL",
-            "key_findings": [
-                "Fundamental filing review in progress for this asset.",
-                "Stable balance sheet with moderate liquidity ratios.",
-                "Revenue trajectory tracking industry averages."
-            ]
-        })
+        # If ticker is uncataloged and has no documents
+        if not citations:
+            elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
+            return {
+                "name": "Fundamental Researcher",
+                "stance": "NEUTRAL",
+                "score": 50,
+                "latency_ms": elapsed_ms,
+                "timed_out": False,
+                "key_findings": [
+                    f"No regulatory filings or earnings transcripts currently indexed for {ticker_up}.",
+                    "Fundamental score defaulted to neutral baseline pending corporate filing upload.",
+                    "Upload 10-K/10-Q or earnings transcripts via the Ingestion panel to enable grounded research."
+                ],
+                "citations": []
+            }
 
-        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res["retrieval_ms"], 1)
+        # 2. Attempt LLM-driven evidence extraction if Gemini is active
+        llm_analysis = llm_client.extract_fundamental_evidence(ticker=ticker_up, citations=citations)
+
+        if llm_analysis:
+            score = llm_analysis["score"]
+            stance = llm_analysis["stance"]
+            key_findings = llm_analysis["key_findings"]
+        else:
+            # 3. Deterministic Evidence Extraction Engine (Offline Fallback)
+            score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
+
+        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
 
         # Format citations to adhere strictly to API_CONTRACTS
         formatted_citations = []
-        for i, c in enumerate(citations):
+        for c in citations:
             formatted_citations.append({
                 "id": c["id"],
                 "document_title": c["document_title"],
@@ -117,12 +85,68 @@ class RAGAgent:
 
         return {
             "name": "Fundamental Researcher",
-            "stance": profile["stance"],
-            "score": profile["score"],
+            "stance": stance,
+            "score": score,
             "latency_ms": elapsed_ms,
             "timed_out": False,
-            "key_findings": profile["key_findings"],
+            "key_findings": key_findings,
             "citations": formatted_citations
         }
+
+    def _extract_deterministic_evidence(
+        self,
+        ticker: str,
+        citations: List[Dict[str, Any]]
+    ) -> (int, str, List[str]):
+        """
+        Derives fundamental score and key findings directly from citation excerpts
+        when the external LLM is offline.
+        """
+        base_score = 50.0
+        findings = []
+
+        pos_terms = [
+            "growth", "record", "expansion", "profit", "surpassed", "surpassing",
+            "strong", "cash", "dividend", "revival", "rose", "climbing", "climb",
+            "robust", "increase", "operating income", "accelerated", "healthy"
+        ]
+        neg_terms = [
+            "debt", "contraction", "headwind", "headwinds", "decline", "pressure",
+            "drop", "cut", "drain", "loss", "fell", "decrease", "compress", "compression"
+        ]
+
+        for c in citations:
+            excerpt = c.get("excerpt", "")
+            section = c.get("section", "Filing")
+            doc_title = c.get("document_title", "Disclosure")
+            relevance = c.get("relevance_score", 0.8)
+            sentiment = c.get("sentiment", "neutral")
+
+            lower = excerpt.lower()
+            pos_hits = sum(1 for term in pos_terms if term in lower)
+            neg_hits = sum(1 for term in neg_terms if term in lower)
+
+            if sentiment == "positive" or pos_hits > neg_hits:
+                delta = 16.0 * relevance + (pos_hits * 3.5)
+                base_score += delta
+            elif sentiment == "negative" or neg_hits > pos_hits:
+                delta = 16.0 * relevance + (neg_hits * 3.5)
+                base_score -= delta
+
+            # Formulate grounded finding directly from document excerpt
+            short_excerpt = excerpt[:140] + "..." if len(excerpt) > 140 else excerpt
+            findings.append(f"{doc_title} ({section}): \"{short_excerpt}\"")
+
+        final_score = int(max(15, min(95, round(base_score))))
+
+        if final_score >= 60:
+            stance = "BULLISH"
+        elif final_score <= 42:
+            stance = "BEARISH"
+        else:
+            stance = "NEUTRAL"
+
+        return final_score, stance, findings[:3]
+
 
 rag_agent = RAGAgent()

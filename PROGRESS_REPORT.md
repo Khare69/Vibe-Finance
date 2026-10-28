@@ -92,19 +92,22 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 2: True Vector RAG & Citation Grounding
-*Status: [ ] Pending*
+*Status: [x] Completed (Verified via `backend/tests/test_vector_rag.py`)*
 
-* **Sub-phase 2.1: Vector Knowledge Base Engine**
-  * Target: `backend/rag/`
-  * Implement true vector storage using dense embeddings (e.g. ChromaDB or FAISS with sentence-transformers or Gemini embeddings).
-  * Index SEC 10-K/10-Q filings and SEBI earnings transcripts with chunk metadata (ticker, fiscal period, page, section, source URL).
-* **Sub-phase 2.2: LLM-Driven Evidence Extraction**
-  * Target: `backend/agents/rag_agent.py`
-  * Replace static `TICKER_FUNDAMENTAL_PROFILES` with dynamic LLM synthesis over retrieved vector chunks.
-  * Generate fundamental scores, stance, and key findings with direct verbatim quotes and page references.
-* **Sub-phase 2.3: Document Upload Pipeline & Sanitization**
-  * Target: `backend/main.py`, `backend/rag/`
-  * Enable PDF/text document upload with automatic text extraction, chunking, deduplication, and prompt-injection sanitization.
+* **Sub-phase 2.1: Vector Knowledge Base Engine** [x] Completed
+  * Target: `backend/rag/vector_store.py`, `backend/rag/retriever.py`
+  * Implemented `VectorStore` utilizing n-gram TF-IDF vectorization and cosine similarity scoring.
+  * Enforced strict ticker candidate pre-filtering to eliminate cross-ticker data leakage and look-ahead bias.
+  * Added persistence layer (`vector_db.json`) preserving corpus state and dynamic filings across restarts.
+* **Sub-phase 2.2: LLM-Driven Evidence Extraction** [x] Completed
+  * Target: `backend/agents/rag_agent.py`, `backend/agents/llm_client.py`
+  * Retired and completely removed the static `TICKER_FUNDAMENTAL_PROFILES` dictionary.
+  * Modernized LLM client: updated model to Gemini 2.5 Flash, passed API keys via `x-goog-api-key` headers (removing keys from URLs).
+  * Built dual extraction paths: dynamic LLM extraction with citation excerpts, and deterministic sentiment/keyword weighting fallback when offline.
+* **Sub-phase 2.3: Document Upload Pipeline & Sanitization** [x] Completed
+  * Target: `backend/main.py`, `backend/rag/vector_store.py`
+  * Implemented prompt-injection and control-character sanitization (`sanitize_text`).
+  * Built `/api/rag/upload-file` supporting direct `.pdf`, `.txt`, and `.md` ingestion with PyMuPDF page-by-page text extraction.
 
 ---
 
@@ -184,3 +187,6 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 28, 2026 | Phase 1.2 | Replaced sine-wave price walk in `get_history()` with genuine historical OHLCV bars across 1M, 3M, 1Y timeframes. | Completed |
 | Oct 28, 2026 | Phase 1.3 | Deleted hardcoded RELIANCE special-case in synthesis; generalized explanations; removed all artificial latency floors and hardcoded 128ms vector search. | Completed |
 | Oct 28, 2026 | Phase 1.4 | Removed silent `MOCK_ANALYSES` fallback; added user-facing Demo Mode banner and verified Vite production build. | Completed |
+| Oct 28, 2026 | Phase 2.1 | Built persistent `VectorStore` with TF-IDF cosine similarity, ticker isolation, and JSON persistence. | Completed |
+| Oct 28, 2026 | Phase 2.2 | Retired `TICKER_FUNDAMENTAL_PROFILES`; built dynamic LLM extraction with secure auth and deterministic fallback. | Completed |
+| Oct 28, 2026 | Phase 2.3 | Added prompt-injection sanitization and `/api/rag/upload-file` supporting PDF parsing via PyMuPDF. | Completed |

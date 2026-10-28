@@ -1,7 +1,7 @@
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -312,6 +312,46 @@ async def upload_rag_document(req: UploadDocumentRequest):
     return {
         "status": "indexed",
         "ticker": req.ticker.upper(),
+        "chunks_created": len(chunks),
+        "total_corpus_documents": len(rag_retriever.documents)
+    }
+
+@app.post("/api/rag/upload-file")
+async def upload_rag_file(
+    file: UploadFile = File(...),
+    ticker: str = Form(...),
+    document_title: Optional[str] = Form("Uploaded Corporate Document")
+):
+    """Handles PDF and text file uploads, extracting text via PyMuPDF and indexing into VectorStore."""
+    filename = file.filename or "uploaded_file"
+    ext = filename.split(".")[-1].lower() if "." in filename else ""
+    if ext not in ["pdf", "txt", "md"]:
+        raise HTTPException(status_code=400, detail="Only .pdf, .txt, and .md files are supported for vector ingestion")
+
+    content_bytes = await file.read()
+    if len(content_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds maximum 10MB limit")
+
+    if ext == "pdf":
+        chunks = rag_retriever.ingest_pdf(
+            pdf_bytes=content_bytes,
+            ticker=ticker,
+            document_title=document_title or filename
+        )
+    else:
+        text = content_bytes.decode("utf-8", errors="ignore")
+        chunks = rag_retriever.ingest_document(
+            ticker=ticker,
+            document_title=document_title or filename,
+            section="Uploaded File",
+            content=text,
+            source_type="FILE_UPLOAD"
+        )
+
+    return {
+        "status": "indexed",
+        "ticker": ticker.upper(),
+        "filename": filename,
         "chunks_created": len(chunks),
         "total_corpus_documents": len(rag_retriever.documents)
     }

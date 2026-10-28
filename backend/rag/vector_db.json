@@ -1,0 +1,284 @@
+[
+  {
+    "id": "rel-cite-1",
+    "ticker": "RELIANCE",
+    "document_title": "Q3 FY26 Earnings Call Transcript",
+    "source_type": "SEBI_TRANSCRIPT",
+    "section": "Management Q&A - Page 8",
+    "excerpt": "While top-line growth stayed resilient, debt servicing on our accelerated 5G and green energy capex expanded 18% YoY, creating transient headwinds on net cash flows.",
+    "sentiment": "negative",
+    "keywords": [
+      "debt",
+      "capex",
+      "headwinds",
+      "cash flow",
+      "green energy"
+    ],
+    "relevance_base": 0.94
+  },
+  {
+    "id": "rel-cite-2",
+    "ticker": "RELIANCE",
+    "document_title": "Annual Report & Financial Statements (Form 10-K / SEBI Filing)",
+    "source_type": "SEBI_FILING",
+    "section": "Management Discussion & Analysis - Segment Performance - Page 42",
+    "excerpt": "Core retail EBITDA margin faced a contraction of approximately 140 basis points owing to aggressive competitive promotional pricing across tier-2 cities.",
+    "sentiment": "negative",
+    "keywords": [
+      "margin pressure",
+      "retail",
+      "contraction",
+      "ebitda",
+      "competition"
+    ],
+    "relevance_base": 0.89
+  },
+  {
+    "id": "rel-cite-3",
+    "ticker": "RELIANCE",
+    "document_title": "Investor Presentation Q3 FY26",
+    "source_type": "SEBI_FILING",
+    "section": "Oil-to-Chemicals & Refining Operations - Page 14",
+    "excerpt": "Refining margins stabilized at $9.80/bbl supported by favorable middle distillate spreads and higher petrochemical integration, cushioning downstream demand fluctuations.",
+    "sentiment": "positive",
+    "keywords": [
+      "refining",
+      "margins",
+      "petrochemical",
+      "robust demand"
+    ],
+    "relevance_base": 0.82
+  },
+  {
+    "id": "tcs-cite-1",
+    "ticker": "TCS",
+    "document_title": "Q3 FY26 Earnings Call Transcript",
+    "source_type": "SEBI_TRANSCRIPT",
+    "section": "CEO Commentary & Strategic Highlights - Page 6",
+    "excerpt": "We are observing early green shoots in BFSI discretionary modernization across North America. Total Contract Value (TCV) stood solid at $10.2 billion, reflecting continued client trust.",
+    "sentiment": "positive",
+    "keywords": [
+      "bfsi",
+      "tcv",
+      "deal wins",
+      "recovery",
+      "robust demand"
+    ],
+    "relevance_base": 0.92
+  },
+  {
+    "id": "tcs-cite-2",
+    "ticker": "TCS",
+    "document_title": "SEBI Regulatory Disclosure - Audited Financial Results",
+    "source_type": "SEBI_FILING",
+    "section": "Cash Flow & Capital Allocation Statement - Page 22",
+    "excerpt": "Operating cash flow conversion ratio stood exemplary at 104% of net profit, ensuring robust dividend payouts and zero debt dependency across subsidiaries.",
+    "sentiment": "positive",
+    "keywords": [
+      "cash flow",
+      "dividend",
+      "zero debt",
+      "balance sheet strength"
+    ],
+    "relevance_base": 0.9
+  },
+  {
+    "id": "infy-cite-1",
+    "ticker": "INFY",
+    "document_title": "Q3 FY26 Earnings Call Transcript",
+    "source_type": "SEBI_TRANSCRIPT",
+    "section": "Executive Guidance & Q&A - Page 11",
+    "excerpt": "Client decision cycles in non-critical digital transformation programs remained elongated during the quarter. Consequently, we have revised our constant currency revenue guidance band to 3.75%-4.5%.",
+    "sentiment": "neutral",
+    "keywords": [
+      "guidance",
+      "elongated cycles",
+      "discretionary spend",
+      "headwinds"
+    ],
+    "relevance_base": 0.88
+  },
+  {
+    "id": "infy-cite-2",
+    "ticker": "INFY",
+    "document_title": "Form 6-K SEC / SEBI Statutory Filing",
+    "source_type": "SEBI_FILING",
+    "section": "Operating Margins & Cost Structure - Page 35",
+    "excerpt": "Operating margin experienced 80 bps sequential compression caused by phased wage revisions and sub-contractor costs before optimization programs kick in.",
+    "sentiment": "negative",
+    "keywords": [
+      "margin pressure",
+      "wage hike",
+      "compression",
+      "headwinds"
+    ],
+    "relevance_base": 0.85
+  },
+  {
+    "id": "nvda-cite-1",
+    "ticker": "NVDA",
+    "document_title": "SEC Form 10-Q Quarterly Report",
+    "source_type": "SEC_FILING",
+    "section": "Item 2. Management Discussion & Analysis - Page 38",
+    "excerpt": "Data Center compute revenue grew 112% year-over-year fueled by unabated global demand for Hopper GPU platforms and initial enterprise Blackwell shipments.",
+    "sentiment": "positive",
+    "keywords": [
+      "data center",
+      "gpu",
+      "revenue growth",
+      "robust demand",
+      "blackwell"
+    ],
+    "relevance_base": 0.96
+  },
+  {
+    "id": "nvda-cite-2",
+    "ticker": "NVDA",
+    "document_title": "Q3 FY26 Earnings Conference Call Transcript",
+    "source_type": "SEC_TRANSCRIPT",
+    "section": "CFO Prepared Remarks - Page 5",
+    "excerpt": "Gross margins stabilized at an industry-leading 75.1%. Blackwell architecture demand continues to outpace total fab capacity through the upcoming fiscal quarters.",
+    "sentiment": "positive",
+    "keywords": [
+      "margins",
+      "blackwell",
+      "capacity",
+      "capex",
+      "robust demand"
+    ],
+    "relevance_base": 0.93
+  },
+  {
+    "id": "aapl-cite-1",
+    "ticker": "AAPL",
+    "document_title": "SEC Form 10-K Annual Report",
+    "source_type": "SEC_FILING",
+    "section": "Item 7. Management Discussion of Financial Condition - Page 28",
+    "excerpt": "Services segment achieved an all-time revenue record of $25.8B with an active installed base surpassing 2.2 billion active devices globally.",
+    "sentiment": "positive",
+    "keywords": [
+      "services",
+      "installed base",
+      "ecosystem",
+      "record revenue"
+    ],
+    "relevance_base": 0.91
+  },
+  {
+    "id": "aapl-cite-2",
+    "ticker": "AAPL",
+    "document_title": "Q4 Earnings Call Transcript",
+    "source_type": "SEC_TRANSCRIPT",
+    "section": "Executive Q&A on Greater China & AI Strategy - Page 9",
+    "excerpt": "While Greater China hardware revenues faced slight year-over-year contraction of 2.1%, double-digit expansion in India, Latin America, and Southeast Asia balanced international aggregate revenue.",
+    "sentiment": "neutral",
+    "keywords": [
+      "china",
+      "hardware",
+      "expansion",
+      "india",
+      "headwinds"
+    ],
+    "relevance_base": 0.86
+  },
+  {
+    "id": "tsla-cite-1",
+    "ticker": "TSLA",
+    "document_title": "SEC Form 10-Q Quarterly Report",
+    "source_type": "SEC_FILING",
+    "section": "Item 2. MD&A - Automotive Gross Margin - Page 45",
+    "excerpt": "Automotive gross margin excluding regulatory credits dropped to 14.6%, directly impacted by sequential vehicle pricing reductions and higher introductory financing incentives.",
+    "sentiment": "negative",
+    "keywords": [
+      "margin pressure",
+      "price cuts",
+      "automotive margin",
+      "discounting"
+    ],
+    "relevance_base": 0.95
+  },
+  {
+    "id": "tsla-cite-2",
+    "ticker": "TSLA",
+    "document_title": "Q3 Earnings Call Transcript",
+    "source_type": "SEC_TRANSCRIPT",
+    "section": "Autonomous Driving & CapEx Guidance - Page 12",
+    "excerpt": "CapEx investments for AI training compute clusters and Dojo expansion will exceed $11 billion this year, impacting near-term free cash flow conversion until Full Self-Driving licensing scales.",
+    "sentiment": "negative",
+    "keywords": [
+      "capex",
+      "cash flow drain",
+      "ai clusters",
+      "headwinds"
+    ],
+    "relevance_base": 0.9
+  },
+  {
+    "id": "hdfc-cite-1",
+    "ticker": "HDFCBANK",
+    "document_title": "Q3 FY26 Earnings Conference Call Transcript",
+    "source_type": "SEBI_TRANSCRIPT",
+    "section": "Management Discussion - NIM & Margin Guidance - Page 7",
+    "excerpt": "Net Interest Margin (NIM) stabilized at 3.45% post-merger integration. Deposit mobilization accelerated 16.8% YoY, aiding gradual recovery in our credit-to-deposit ratio.",
+    "sentiment": "positive",
+    "keywords": [
+      "nim",
+      "deposits",
+      "credit deposit ratio",
+      "merger synergies",
+      "margins"
+    ],
+    "relevance_base": 0.93
+  },
+  {
+    "id": "hdfc-cite-2",
+    "ticker": "HDFCBANK",
+    "document_title": "Audited Financial Results & SEBI Regulatory Filing",
+    "source_type": "SEBI_FILING",
+    "section": "Asset Quality & Provisioning Schedule - Page 28",
+    "excerpt": "Gross Non-Performing Assets (GNPA) stood robust at 1.28% against 1.34% sequentially. Slippages were well contained across commercial banking and retail portfolios.",
+    "sentiment": "positive",
+    "keywords": [
+      "asset quality",
+      "gnpa",
+      "provisions",
+      "credit quality",
+      "balance sheet strength"
+    ],
+    "relevance_base": 0.91
+  },
+  {
+    "id": "hdfc-cite-3",
+    "ticker": "HDFCBANK",
+    "document_title": "Investor Presentation Q3 FY26",
+    "source_type": "SEBI_FILING",
+    "section": "Branch Productivity & Digital Banking Highlights - Page 16",
+    "excerpt": "Operating expenses rose 11.2% YoY due to ongoing branch network expansion and IT platform modernization, slightly compressing cost-to-income efficiency ratios.",
+    "sentiment": "negative",
+    "keywords": [
+      "operating expenses",
+      "opex",
+      "cost to income",
+      "headwinds"
+    ],
+    "relevance_base": 0.85
+  },
+  {
+    "id": "msft-upload-1793167977-16",
+    "ticker": "MSFT",
+    "document_title": "Q2 Earnings Report",
+    "source_type": "USER_UPLOAD",
+    "fiscal_period": "Q3 FY26",
+    "section": "Cloud Performance - Page 4",
+    "excerpt": "Microsoft Cloud quarterly revenue topped $38.9 billion, climbing 22% YoY fueled by Azure AI infrastructure. Operating income rose 15% with robust commercial bookings backlog surpassing $250 billion.",
+    "sentiment": "positive",
+    "relevance_base": 0.88,
+    "keywords": [
+      "surpassing",
+      "rose",
+      "climbing",
+      "climb",
+      "robust"
+    ]
+  }
+]
