@@ -1,0 +1,183 @@
+# VibeFinance — Project Progress, Audit & Production Roadmap Report
+
+**Repository:** `https://github.com/Khare69/Vibe-Finance`  
+**Current Date:** October 28, 2026  
+**Document Status:** Live Living Document (Updated after each phase/sub-phase)
+
+---
+
+## 1. Executive Summary & Genesis
+
+VibeFinance is an explainable, multi-agent financial intelligence and portfolio risk simulation platform tailored for retail investors. The system orchestrates three specialized analytical agents:
+1. **Quantitative Analyst Agent:** Algorithmic momentum, moving average crossovers, volatility modeling, and technical indicators.
+2. **Fundamental Researcher Agent:** Retrieval-Augmented Generation (RAG) over corporate filings (SEC 10-K/10-Q, SEBI filings, earnings call transcripts).
+3. **Behavioral Risk Manager Agent:** Bias detection, emotional portfolio stress-testing, drawdown constraints, and risk-adjusted position sizing.
+
+This progress report tracks the complete evolutionary history of the platform—documenting what was built in the initial prototype phase (Commits 1–8), the findings of the comprehensive external engineering and quantitative audit, and the phased execution of the production-grade modernization overhaul.
+
+---
+
+## 2. Historical Ledger: Progress & Commits (Day 1 to Present)
+
+The project initially evolved across 5 initial prototype milestones captured in Git:
+
+| Commit Hash | Commit Message | Date / Timestamp | Key Deliverables & Scope |
+| :--- | :--- | :--- | :--- |
+| `cb6b3e3` | `Initial commit: Vibe Finance Multi-Agent Investment Intelligence` | Oct 2026 | Initial repository setup, basic FastAPI backend architecture, mock multi-agent dialogue, initial React dashboard skeleton, and core documentation. |
+| `1aa1169` | `Fix blank screen issue: add ErrorBoundary, fallback initial state, and defensive property handling in TickerSelector` | Oct 2026 | Frontend stability improvements: added React `ErrorBoundary`, null-safe prop checks, initial state resilience for ticker switching. |
+| `3fce99b` | `fix(phase-1): resolve RAG fallback cross-contamination, exact portfolio delta math, penalty alignment, and audio leak` | Oct 2026 | Resolved data leakage across ticker analyses, corrected portfolio balance delta logic, normalized behavioral risk penalties, and fixed audio speech synthesis overlap. |
+| `10326df` | `feat(phase-2): add SQLite persistent database layer for user profiles, holdings, watchlists, and decision memos` | Oct 2026 | Introduced SQLite persistent storage layer (`vibe_finance.db`), schema models for user profile, portfolio holdings, watchlists, and generated investment decision memos. |
+| `4c6b640` | `feat(phase-3): live market data provider integration, real mathematical technical indicators, and OHLCV candlestick history endpoint` | Oct 2026 | Added Yahoo Finance live price quote fetching endpoint, mathematical indicator calculation utilities (Wilder's RSI, EMA, SMA, MACD), and OHLCV history generator. |
+| `a240382` | `feat(phase-4): hybrid LLM agent debate engine, generalized synthesis for arbitrary tickers, and dynamic RAG document ingestion` | Oct 2026 | Implemented Google Gemini API integration for generating adversarial multi-agent debate dialogue, dynamic document ingestion endpoints, and multi-tier synthesis (Beginner & Expert). |
+| `4a3b475` | `feat(phase-5): add TradingView candlestick charts, audio waveform visualizer, portfolio rebalancer, and macro stress simulator` | Oct 2026 | Frontend UI expansion: integrated TradingView `lightweight-charts`, audio waveform player for agent voices, portfolio rebalancing wizard, and macro stress test sliders. |
+| `a3d7223` | `fix: resolve cross-ticker trade pricing bug, wire persistent profile/memo storage, add RAG ingestion UI, and update docs` | Oct 28, 2026 | Fixed trade execution price binding across ticker transitions, wired frontend memo export to backend SQLite storage, added manual RAG document upload UI. |
+
+---
+
+## 3. Comprehensive System Audit Findings ("The Reality Gap")
+
+Following the completion of the prototype, an in-depth three-part technical, quantitative, and architectural audit was performed on the codebase. While the user experience, architecture concepts, and design were rated as strong, the audit identified critical discrepancies between what the documentation claimed and what the code executed under the hood:
+
+### A. Quantitative Calculations & Market Data
+* **Claim:** Quantitative Analyst dynamically computes RSI-14, 50-EMA, 200-SMA, and MACD from live price feeds.
+* **Reality:** While mathematical indicator functions existed in `MarketService`, the agent directly read hardcoded static values from the `STOCKS` dictionary (e.g., RELIANCE RSI = 58.4, TCS RSI = 49.2). Live Yahoo prices were fetched, but displayed next to frozen, stale indicators.
+* **Candlestick Generation:** `get_history()` generated daily OHLCV bars using a mathematical sine-wave formula (`math.sin(d * 0.7)`), not actual historical market candles.
+
+### B. Fundamental RAG Intelligence
+* **Claim:** Vector-based retrieval over regulatory corporate filings and earnings transcripts.
+* **Reality:** `retriever.py` executed basic keyword substring overlap against an in-memory document array without dense vector embeddings. The agent's stance, score, and key findings were pulled directly from a static `TICKER_FUNDAMENTAL_PROFILES` dictionary.
+
+### C. Backtesting Rigor & Replay
+* **Claim:** Historical backtest simulator replaying multi-agent recommendations against historical price trajectories.
+* **Reality:** `simulator.py` was a static lookup table (`HISTORICAL_BENCHMARKS`) containing 6 hand-written records for a single historical date (`2025-10-15`). It never dynamically executed agent logic on historical point-in-time data.
+
+### D. Synthesis & Orchestration
+* **Rigged Branching:** `synthesis_agent.py` contained hardcoded special-case logic: `(ticker.upper() == "RELIANCE" and has_disagreement and user_risk == "conservative")`, forcing a pre-baked demo headline and recommendation.
+* **Artificial Latency:** Agent telemetry latencies were artificially floored with `max(..., 380)` and hardcoded `128ms` vector search times to simulate processing overhead.
+* **Async Event Loop Blocking:** Synchronous `httpx.Client` and `sqlite3` calls inside asynchronous FastAPI routes blocked the event loop.
+* **Security & Configuration:** Gemini API keys were appended to URL query parameters; wildcard CORS (`allow_origins=["*"]`) was paired with `allow_credentials=True`.
+
+### E. Frontend Failures
+* **Silent Mock Fallback:** `frontend/src/services/api.js` automatically caught backend errors and silently served mock data (`MOCK_ANALYSES`), creating the illusion of a working backend even during total server failure.
+
+---
+
+## 4. Modernization Master Plan: Phases & Sub-Phases
+
+The overhaul is divided into six sequential, non-breaking phases. Each sub-phase has discrete deliverables, validation criteria, and git tracking.
+
+### Phase 1: Foundation Integrity & Eliminating Mocked Calculations ("Ground Truth")
+*Status: [ ] Pending*
+
+* **Sub-phase 1.1: Dynamic Market Data & Deterministic Technicals**
+  * Target: `backend/data/market_service.py`, `backend/agents/quant_agent.py`
+  * Replace static `STOCKS` indicator dictionary with dynamic historical candle retrieval via `yfinance`.
+  * Compute real RSI-14 (Wilder's smoothing), 50-SMA, 200-SMA, 12/26/9 MACD, and 20-day volume ratio dynamically on genuine price series.
+  * *Verification:* Dynamic indicator values change based on actual market price movement across all tickers.
+* **Sub-phase 1.2: Genuine OHLCV Candlestick History**
+  * Target: `backend/data/market_service.py`
+  * Replace sine-wave generator (`math.sin`) in `get_history()` with genuine historical OHLCV candle bars fetched from market data providers.
+  * Support multiple dynamic timeframes (`1M`, `3M`, `1Y`).
+  * *Verification:* Candlestick charts in the UI display real historical price bars matching official market charts.
+* **Sub-phase 1.3: Removing Demo Rigging & Artificial Latencies**
+  * Target: `backend/agents/synthesis_agent.py`, `backend/agents/quant_agent.py`, `backend/agents/rag_agent.py`
+  * Delete the special-case `elif ticker.upper() == "RELIANCE"` override in synthesis; let deterministic weights govern recommendations.
+  * Remove artificial latency flooring (`max(..., 380)`).
+  * *Verification:* RELIANCE recommendations reflect dynamic scores rather than forced demo strings.
+* **Sub-phase 1.4: Frontend Transparency & Error Visibility**
+  * Target: `frontend/src/services/api.js`, `frontend/src/App.jsx`
+  * Remove silent fallback to `MOCK_ANALYSES` on backend failures.
+  * Surface a prominent, user-visible banner when the backend is unreachable or operating in local demo mode.
+  * *Verification:* Stopping the backend triggers a clear UI alert instead of silently showing stale mock data.
+
+---
+
+### Phase 2: True Vector RAG & Citation Grounding
+*Status: [ ] Pending*
+
+* **Sub-phase 2.1: Vector Knowledge Base Engine**
+  * Target: `backend/rag/`
+  * Implement true vector storage using dense embeddings (e.g. ChromaDB or FAISS with sentence-transformers or Gemini embeddings).
+  * Index SEC 10-K/10-Q filings and SEBI earnings transcripts with chunk metadata (ticker, fiscal period, page, section, source URL).
+* **Sub-phase 2.2: LLM-Driven Evidence Extraction**
+  * Target: `backend/agents/rag_agent.py`
+  * Replace static `TICKER_FUNDAMENTAL_PROFILES` with dynamic LLM synthesis over retrieved vector chunks.
+  * Generate fundamental scores, stance, and key findings with direct verbatim quotes and page references.
+* **Sub-phase 2.3: Document Upload Pipeline & Sanitization**
+  * Target: `backend/main.py`, `backend/rag/`
+  * Enable PDF/text document upload with automatic text extraction, chunking, deduplication, and prompt-injection sanitization.
+
+---
+
+### Phase 3: Deterministic Walk-Forward Backtesting Engine
+*Status: [ ] Pending*
+
+* **Sub-phase 3.1: Historical Point-in-Time Data Simulation**
+  * Target: `backend/backtest/simulator.py`
+  * Delete the 6-item static dictionary (`HISTORICAL_BENCHMARKS`).
+  * Build walk-forward historical simulation over arbitrary user-selected dates using strictly point-in-time data (eliminating look-ahead bias).
+* **Sub-phase 3.2: Financial Performance & Risk Metrics**
+  * Target: `backend/backtest/simulator.py`
+  * Compute standard quantitative metrics: CAGR, Maximum Drawdown, Sharpe Ratio, Sortino Ratio, Win Rate, and Benchmark Alpha (vs. Nifty 50 / S&P 500).
+* **Sub-phase 3.3: Frontend Backtest UI Integration**
+  * Target: `frontend/src/components/BacktestSimulator.jsx`
+  * Connect interactive date pickers and parameter controls to the dynamic backtest API, rendering real historical equity curves.
+
+---
+
+### Phase 4: Backend Architecture, State Orchestration & Security Hardening
+*Status: [ ] Pending*
+
+* **Sub-phase 4.1: Async Event Loop & Network Optimization**
+  * Target: `backend/main.py`, `backend/agents/llm_client.py`, `backend/database.py`
+  * Replace synchronous `httpx.Client` with `httpx.AsyncClient`; run parallel agent tasks via `asyncio.gather`.
+  * Ensure non-blocking database access.
+* **Sub-phase 4.2: API Security & Clean Packaging**
+  * Target: `backend/`
+  * Pass Gemini API keys via `x-goog-api-key` header (remove keys from URL query strings).
+  * Fix CORS policy: restrict origins to frontend hosts (`http://localhost:5173`) when credentials are enabled.
+  * Standardize package imports, eliminating duplicated `try/except ImportError` blocks.
+* **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)**
+  * Target: `backend/agents/`
+  * Structure agent orchestration into a typed cyclic directed graph (`StateGraph`) with explicit bull-vs-bear debate cycles and circuit breakers.
+
+---
+
+### Phase 5: Streaming Telemetry & Frontend Experience
+*Status: [ ] Pending*
+
+* **Sub-phase 5.1: Server-Sent Events (SSE) Streaming Telemetry**
+  * Target: `backend/main.py`, `frontend/src/`
+  * Add `/api/analysis/stream/{ticker}` streaming agent thoughts, indicator computations, and debate turns in real time.
+* **Sub-phase 5.2: Evidence Explorer UI**
+  * Target: `frontend/src/components/`
+  * Clickable citation badges in the UI that open a modal displaying the exact document excerpt, page number, and source filing date.
+* **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails**
+  * Target: `frontend/src/`, `backend/`
+  * Interactive macro shock simulator (e.g. 2020 Liquidity Shock, 2022 Rate Hike).
+  * Prominent educational disclaimers reframing outputs as research simulations rather than SEBI-regulated investment advice.
+
+---
+
+### Phase 6: Automated Evaluation, Test Suite Overhaul & CI/CD
+*Status: [ ] Pending*
+
+* **Sub-phase 6.1: Comprehensive Test Suite Overhaul**
+  * Target: `backend/test_suite.py`, `backend/tests/`
+  * Replace hardcoded value assertions with property-based and mathematical tests (e.g. verifying Wilder's RSI against known mathematical baselines).
+* **Sub-phase 6.2: RAG Faithfulness & Citation Evaluation**
+  * Target: `backend/tests/`
+  * Automated LLM-as-a-judge / Ragas evaluation suite checking hallucination rates, citation validity, and abstention behavior.
+* **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow**
+  * Target: `.github/workflows/ci.yml`, `Dockerfile`, `docker-compose.yml`
+  * Automate linting, testing, and containerized deployment verification.
+
+---
+
+## 5. Live Activity & Update Log
+
+*This section is updated in real time as each sub-phase is executed and committed.*
+
+| Date / Time | Phase.Sub | Description of Changes / Corrections | Status |
+| :--- | :--- | :--- | :--- |
+| Oct 28, 2026 | Initial | Initialized progress report capturing Commits 1–8, audit synthesis, and modernization master plan. | Completed |
