@@ -26,7 +26,7 @@ class RAGRetriever:
         # Filter by ticker first
         matched_docs = [doc for doc in self.documents if doc.get("ticker") == ticker_up]
         if not matched_docs:
-            elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 45)
+            elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
             return {
                 "citations": [],
                 "documents_scanned": 0,
@@ -61,9 +61,7 @@ class RAGRetriever:
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
         top_results = results[:top_k]
 
-        elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-        # Ensure realistic latency minimum for vector retrieval telemetry
-        elapsed_ms = max(elapsed_ms, 120)
+        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         return {
             "citations": top_results,

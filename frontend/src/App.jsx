@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Header from './components/Header';
 import VibeCheckModal from './components/VibeCheckModal';
 import TickerSelector from './components/TickerSelector';
@@ -119,6 +120,16 @@ export default function App() {
         staleMode={staleMode}
         ragTimeoutMode={ragTimeoutMode}
       />
+
+      {/* Backend Offline / Demo Snapshot Warning Banner */}
+      {(systemHealth?.is_backend_offline || analysis?.is_offline_mock) && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-2.5 text-center text-xs text-amber-300 flex items-center justify-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>
+            <strong>Demo Mode (Backend Offline):</strong> FastAPI backend is unreachable. Displaying local demo snapshot. Run <code className="bg-amber-950/60 px-1.5 py-0.5 rounded text-amber-200 font-mono text-[11px]">start_backend.bat</code> to connect live multi-agent intelligence.
+          </span>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">

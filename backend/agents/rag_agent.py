@@ -101,7 +101,7 @@ class RAGAgent:
             ]
         })
 
-        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res["retrieval_ms"], 240)
+        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res["retrieval_ms"], 1)
 
         # Format citations to adhere strictly to API_CONTRACTS
         formatted_citations = []

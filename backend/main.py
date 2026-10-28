@@ -113,11 +113,14 @@ class UploadDocumentRequest(BaseModel):
 
 @app.get("/api/health")
 async def get_health():
+    # Probe market data service status
+    sample_stock = market_service.get_market_data("NVDA")
+    is_live = sample_stock.get("feed_status") == "LIVE_YAHOO"
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "degraded_mode": False,
-        "active_feed": "LIVE_YAHOO",
+        "degraded_mode": not is_live,
+        "active_feed": "LIVE_YAHOO" if is_live else "STALE_FALLBACK_EOD",
         "rag_corpus_documents": len(RAG_DOCUMENTS)
     }
 
@@ -178,9 +181,7 @@ async def analyze_stock(req: AnalyzeRequest):
     sentiment_shift = rag_retriever.get_sentiment_timeline(ticker)
 
     # 7. Telemetry & Degradation Flags
-    total_elapsed_ms = int((time.perf_counter() - overall_start) * 1000)
-    # Give realistic minimum end-to-end multi-agent execution time
-    total_elapsed_ms = max(total_elapsed_ms, 380)
+    total_elapsed_ms = max(int((time.perf_counter() - overall_start) * 1000), 1)
 
     degraded_data = sim_stale or sim_timeout
     degraded_reason = None
@@ -202,7 +203,7 @@ async def analyze_stock(req: AnalyzeRequest):
         quant_ms=quant_res["latency_ms"],
         rag_ms=rag_res["latency_ms"],
         risk_ms=behavioral_res["latency_ms"],
-        vector_ms=128 if not sim_timeout else 0,
+        vector_ms=rag_res.get("latency_ms", 1) if not sim_timeout else 0,
         documents_scanned=len(rag_res["citations"]) + 2 if not sim_timeout else 0,
         confidence_score=confidence_score,
         degraded_data=degraded_data,

@@ -54,10 +54,10 @@ class SynthesisAgent:
                 final_action = "SELL"
             else:
                 final_action = "HOLD"
-        elif (has_disagreement and quant_score >= 70 and rag_score <= 45 and user_risk == "conservative") or (ticker.upper() == "RELIANCE" and has_disagreement and user_risk == "conservative"):
+        elif has_disagreement and quant_score >= 68 and rag_score <= 45 and user_risk == "conservative":
             final_action = "CAUTIOUS_ACCUMULATE"
             dip_price = round(price * 0.98, 1)
-            headline = f"Wait for Dip near {symbol}{dip_price:,.0f}: Strong Technicals Restrained by Debt Load & User Risk Limit"
+            headline = f"Wait for Pullback near {symbol}{dip_price:,.1f}: Strong Momentum Restrained by Fundamental Headwinds & Risk Limit"
         elif weighted_score >= 80:
             final_action = "STRONG_BUY"
             headline = f"High Conviction Buy on {ticker}: Strong Fundamentals & Technical Alignment"
@@ -91,51 +91,33 @@ class SynthesisAgent:
             beginner_exp = llm_exp["beginner"]
         else:
             # Algorithmic Explanations
-            if ticker.upper() == "RELIANCE":
+            if rag_timed_out:
                 expert_exp = (
-                    "Consensus reflects a multi-factor divergence: quantitative 50-EMA breakout divergence "
-                    "offset by fundamental leverage expansion (18% debt-servicing increase) and conservative risk penalization."
+                    f"Evaluation for {ticker} conducted exclusively via technical momentum indicators (score: {quant_score}/100) "
+                    f"due to upstream filing RAG retrieval timeout. Fundamental weight zeroed out and confidence bounds discounted."
                 )
                 beginner_exp = (
-                    "Think of this like a car speeding up smoothly on the highway (great technicals), "
-                    "but the fuel gauge shows the engine is burning double the gas with debt. "
-                    "Because you don't like scary rollercoasters, we suggest waiting for a cheaper price before buying."
+                    f"Our system could only review {ticker}'s price chart today because corporate filings were temporarily unavailable. "
+                    f"This signal is based on market trend speed only—proceed with extra caution."
                 )
-            elif ticker.upper() == "NVDA":
+            elif has_disagreement:
                 expert_exp = (
-                    "Quantitative trend indicators show strong parabolic continuation confirmed by 112% Data Center "
-                    "hyper-growth and 75.1% gross margin expansion. High beta requires trailing stops for risk-budgeting."
+                    f"Consensus reflects a cross-agent divergence on {ticker}: Quantitative momentum ({quant_score}/100) conflicts "
+                    f"with fundamental filing disclosures ({rag_score}/100). Behavioral risk filters ({behavioral_score}/100) enforce "
+                    f"capital preservation under a {user_risk} mandate."
                 )
                 beginner_exp = (
-                    "NVIDIA is currently firing on all cylinders: customers are queuing around the block for their AI chips, "
-                    "and profits are sky-high. However, it moves very fast like a sports car, so don't put all your savings in one basket."
-                )
-            elif ticker.upper() == "TSLA":
-                expert_exp = (
-                    "Technical breakdown below intermediate moving averages coupled with automotive margin erosion to 14.6% "
-                    "and heavy capital expenditure demands warrants defensive de-risking for risk-averse portfolios."
-                )
-                beginner_exp = (
-                    "Tesla has cut car prices which reduced profits, and they are spending billions on future projects. "
-                    "Since it drops fast in bad weather, it's safer to wait until the road clears before investing."
-                )
-            elif rag_timed_out:
-                expert_exp = (
-                    f"Evaluation conducted exclusively via technical momentum indicators (score: {quant_score}) "
-                    f"due to upstream filing RAG retrieval timeout. Fundamental discount factor applied to confidence bounds."
-                )
-                beginner_exp = (
-                    "Our team could only read the stock's price chart today because the company's financial library was "
-                    "temporarily unavailable. We gave you advice based on price speed only, but please be careful."
+                    f"There is a tug-of-war on {ticker}: the stock price has strong momentum, but the company's financial documents "
+                    f"show warning signs. Because of your {user_risk} investment preference, we recommend a cautious, risk-managed approach."
                 )
             else:
                 expert_exp = (
-                    f"Synthesized recommendation balances quantitative momentum ({quant_score}) against fundamental corporate "
-                    f"disclosures ({rag_score}) filtered through a {user_risk} risk matrix (score: {behavioral_score})."
+                    f"Synthesized recommendation for {ticker} balances quantitative trend indicators ({quant_score}/100) against "
+                    f"fundamental disclosures ({rag_score}/100), calibrated through a {user_risk} risk budget ({behavioral_score}/100)."
                 )
                 beginner_exp = (
-                    f"We combined how fast {ticker} is moving with how healthy its business really is, while keeping your "
-                    f"{user_risk} comfort level in mind so you don't lose sleep over market swings."
+                    f"We evaluated {ticker}'s market momentum alongside its business health from regulatory filings. "
+                    f"The final signal aligns with your {user_risk} risk comfort zone."
                 )
 
         # Macro regime profiling

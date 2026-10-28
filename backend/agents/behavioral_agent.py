@@ -82,7 +82,7 @@ class BehavioralAgent:
         else:
             stance = "MODERATE"
 
-        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 75)
+        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         return {
             "name": "Behavioral Risk Manager",

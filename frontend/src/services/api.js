@@ -13,14 +13,16 @@ export async function checkSystemHealth() {
   try {
     const res = await fetch(`${BASE_URL}/api/health`, { method: 'GET' });
     if (!res.ok) throw new Error('Health check non-200');
-    return await res.json();
+    const data = await res.json();
+    return { ...data, is_backend_offline: false };
   } catch (err) {
     return {
-      status: 'healthy_mock',
+      status: 'offline_mock',
       version: '1.0.0',
-      degraded_mode: false,
-      active_feed: 'LIVE_YAHOO',
-      rag_corpus_documents: 14,
+      degraded_mode: true,
+      active_feed: 'OFFLINE_DEMO_SNAPSHOT',
+      rag_corpus_documents: 0,
+      is_backend_offline: true,
     };
   }
 }
@@ -63,11 +65,17 @@ export async function runMultiAgentAnalysis({
     });
 
     if (!res.ok) throw new Error('Backend analyze failed');
-    return await res.json();
+    const data = await res.json();
+    return { ...data, is_offline_mock: false };
   } catch (err) {
-    // Robust mock handling with simulated fault injection
+    // Robust mock handling with transparent demo snapshot tagging
     const base = MOCK_ANALYSES[ticker] || MOCK_ANALYSES['RELIANCE'];
     const cloned = JSON.parse(JSON.stringify(base));
+    cloned.is_offline_mock = true;
+    cloned.price_data.feed_status = 'OFFLINE_DEMO_SNAPSHOT';
+    cloned.telemetry.degraded_data = true;
+    cloned.telemetry.degraded_reason =
+      'Backend unreachable: Showing offline demo snapshot. Run backend for live agent analysis.';
 
     // Handle Stale Live Data Simulation
     if (simulatedStaleData) {
