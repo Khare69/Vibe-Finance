@@ -1,4 +1,6 @@
 import time
+import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -14,21 +16,22 @@ try:
     from .agents.behavioral_agent import behavioral_agent
     from .agents.debate_engine import debate_engine
     from .agents.synthesis_agent import synthesis_agent
+    from .agents.llm_client import llm_client
     from .personalization.profiler import user_profiler
     from .personalization.portfolio import portfolio_service
     from .backtest.simulator import backtest_simulator
     from .observability.audit_logger import audit_logger
     from .database import (
-        get_user_profile as db_get_user_profile,
-        upsert_user_profile as db_upsert_user_profile,
-        get_all_holdings as db_get_all_holdings,
-        upsert_holding as db_upsert_holding,
-        delete_holding as db_delete_holding,
-        get_watchlist as db_get_watchlist,
-        add_to_watchlist as db_add_to_watchlist,
-        remove_from_watchlist as db_remove_from_watchlist,
-        save_memo as db_save_memo,
-        get_memos as db_get_memos
+        get_user_profile_async as db_get_user_profile_async,
+        upsert_user_profile_async as db_upsert_user_profile_async,
+        get_all_holdings_async as db_get_all_holdings_async,
+        upsert_holding_async as db_upsert_holding_async,
+        delete_holding_async as db_delete_holding_async,
+        get_watchlist_async as db_get_watchlist_async,
+        add_to_watchlist_async as db_add_to_watchlist_async,
+        remove_from_watchlist_async as db_remove_from_watchlist_async,
+        save_memo_async as db_save_memo_async,
+        get_memos_async as db_get_memos_async
     )
     from .models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
 except (ImportError, ValueError):
@@ -40,28 +43,38 @@ except (ImportError, ValueError):
     from agents.behavioral_agent import behavioral_agent
     from agents.debate_engine import debate_engine
     from agents.synthesis_agent import synthesis_agent
+    from agents.llm_client import llm_client
     from personalization.profiler import user_profiler
     from personalization.portfolio import portfolio_service
     from backtest.simulator import backtest_simulator
     from observability.audit_logger import audit_logger
     from database import (
-        get_user_profile as db_get_user_profile,
-        upsert_user_profile as db_upsert_user_profile,
-        get_all_holdings as db_get_all_holdings,
-        upsert_holding as db_upsert_holding,
-        delete_holding as db_delete_holding,
-        get_watchlist as db_get_watchlist,
-        add_to_watchlist as db_add_to_watchlist,
-        remove_from_watchlist as db_remove_from_watchlist,
-        save_memo as db_save_memo,
-        get_memos as db_get_memos
+        get_user_profile_async as db_get_user_profile_async,
+        upsert_user_profile_async as db_upsert_user_profile_async,
+        get_all_holdings_async as db_get_all_holdings_async,
+        upsert_holding_async as db_upsert_holding_async,
+        delete_holding_async as db_delete_holding_async,
+        get_watchlist_async as db_get_watchlist_async,
+        add_to_watchlist_async as db_add_to_watchlist_async,
+        remove_from_watchlist_async as db_remove_from_watchlist_async,
+        save_memo_async as db_save_memo_async,
+        get_memos_async as db_get_memos_async
     )
     from models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manages application lifecycle and gracefully closes async client pools."""
+    yield
+    await llm_client.close()
+
 
 app = FastAPI(
     title="Vibe Finance Multi-Agent API",
     description="Multi-Agent system for quantitative, fundamental RAG, and behavioral investment synthesis",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS for local and web development
@@ -98,7 +111,7 @@ class SimulateTradeRequest(BaseModel):
 
 class BacktestRequest(BaseModel):
     ticker: str = Field(default="NVDA", min_length=1, max_length=20)
-    historical_date: str = Field(default="2025-10-15")
+    historical_date: str = Field(default="2024-10-15")
     holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
 class UploadDocumentRequest(BaseModel):
@@ -113,8 +126,8 @@ class UploadDocumentRequest(BaseModel):
 
 @app.get("/api/health")
 async def get_health():
-    # Probe market data service status
-    sample_stock = market_service.get_market_data("NVDA")
+    # Probe market data service status asynchronously without blocking event loop
+    sample_stock = await asyncio.to_thread(market_service.get_market_data, "NVDA")
     is_live = sample_stock.get("feed_status") == "LIVE_YAHOO"
     return {
         "status": "healthy",
@@ -126,11 +139,11 @@ async def get_health():
 
 @app.get("/api/stocks")
 async def list_stocks():
-    return market_service.list_tracked_stocks()
+    return await asyncio.to_thread(market_service.list_tracked_stocks)
 
 @app.get("/api/stocks/{ticker}/history")
 async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):
-    return market_service.get_history(ticker=ticker, timeframe=timeframe or "1M")
+    return await asyncio.to_thread(market_service.get_history, ticker=ticker, timeframe=timeframe or "1M")
 
 @app.post("/api/analyze")
 async def analyze_stock(req: AnalyzeRequest):
@@ -139,27 +152,37 @@ async def analyze_stock(req: AnalyzeRequest):
     sim_stale = bool(req.simulated_stale_data)
     sim_timeout = bool(req.simulated_rag_timeout)
     
-    # 1. Fetch market data
-    stock_info = market_service.get_stock_info(ticker)
+    # 1. Fetch market data non-blockingly via worker thread
+    stock_info = await asyncio.to_thread(market_service.get_stock_info, ticker)
     company_name = stock_info["name"] if stock_info else f"{ticker} Corp"
-    market_data = market_service.get_market_data(ticker, simulated_stale_data=sim_stale)
+    market_data = await asyncio.to_thread(market_service.get_market_data, ticker, sim_stale)
     
     # 2. Resolve User Profile
     profile_dict = req.user_profile.model_dump() if req.user_profile else {}
-    resolved_profile = user_profiler.get_profile(profile_dict)
+    resolved_profile = await asyncio.to_thread(user_profiler.get_profile, profile_dict)
 
-    # 3. Execute Agents
-    # Quant Agent
-    quant_res = quant_agent.analyze(ticker, market_data)
+    # 3. Parallel Agent Orchestration with asyncio.gather (Zero Event-Loop Blocking)
+    quant_task = quant_agent.analyze_async(ticker, market_data)
+    rag_task = rag_agent.analyze_async(ticker, simulated_rag_timeout=sim_timeout)
+    behavioral_task = behavioral_agent.analyze_async(ticker, resolved_profile, market_data)
 
-    # Fundamental RAG Agent
-    rag_res = rag_agent.analyze(ticker, simulated_rag_timeout=sim_timeout)
+    results = await asyncio.gather(quant_task, rag_task, behavioral_task, return_exceptions=True)
 
-    # Behavioral Risk Manager Agent
-    behavioral_res = behavioral_agent.analyze(ticker, resolved_profile, market_data)
+    quant_res = results[0] if not isinstance(results[0], Exception) else {
+        "name": "Quantitative Analyst", "stance": "NEUTRAL", "score": 50, "latency_ms": 1,
+        "signals": ["Quantitative analysis recovered from error"], "metrics": {}
+    }
+    rag_res = results[1] if not isinstance(results[1], Exception) else {
+        "name": "Fundamental Researcher", "stance": "NEUTRAL", "score": 50, "latency_ms": 1,
+        "timed_out": True, "key_findings": ["RAG agent exception handled gracefully"], "citations": []
+    }
+    behavioral_res = results[2] if not isinstance(results[2], Exception) else {
+        "name": "Behavioral Risk Manager", "stance": "CAUTION", "score": 50, "latency_ms": 1,
+        "user_risk_profile": "moderate", "behavioral_adjustments": []
+    }
 
-    # 4. Debate & Consensus Arbitrage
-    debate_res = debate_engine.conduct_debate(
+    # 4. Async Debate & Consensus Arbitrage
+    debate_res = await debate_engine.conduct_debate_async(
         ticker=ticker,
         quant_result=quant_res,
         rag_result=rag_res,
@@ -167,8 +190,8 @@ async def analyze_stock(req: AnalyzeRequest):
         stale_data=sim_stale
     )
 
-    # 5. Synthesis
-    synthesis_res = synthesis_agent.synthesize(
+    # 5. Async Synthesis
+    synthesis_res = await synthesis_agent.synthesize_async(
         ticker=ticker,
         quant_result=quant_res,
         rag_result=rag_res,
@@ -177,8 +200,8 @@ async def analyze_stock(req: AnalyzeRequest):
         market_data=market_data
     )
 
-    # 6. Sentiment Timeline
-    sentiment_shift = rag_retriever.get_sentiment_timeline(ticker)
+    # 6. Sentiment Timeline non-blocking
+    sentiment_shift = await asyncio.to_thread(rag_retriever.get_sentiment_timeline, ticker)
 
     # 7. Telemetry & Degradation Flags
     total_elapsed_ms = max(int((time.perf_counter() - overall_start) * 1000), 1)
@@ -197,7 +220,8 @@ async def analyze_stock(req: AnalyzeRequest):
     if sim_stale:
         confidence_score = min(60, confidence_score)
 
-    telemetry_data = audit_logger.log_analysis(
+    telemetry_data = await asyncio.to_thread(
+        audit_logger.log_analysis,
         ticker=ticker,
         total_ms=total_elapsed_ms,
         quant_ms=quant_res["latency_ms"],
@@ -234,15 +258,16 @@ async def analyze_stock(req: AnalyzeRequest):
 
 @app.post("/api/simulate-trade")
 async def simulate_trade(req: SimulateTradeRequest):
-    return portfolio_service.simulate_trade(req.model_dump())
+    return await asyncio.to_thread(portfolio_service.simulate_trade, req.model_dump())
 
 @app.get("/api/portfolio")
 async def get_portfolio():
-    return portfolio_service.get_portfolio()
+    return await asyncio.to_thread(portfolio_service.get_portfolio)
 
 @app.post("/api/backtest")
 async def run_backtest(req: BacktestRequest):
-    return backtest_simulator.simulate(
+    return await asyncio.to_thread(
+        backtest_simulator.simulate,
         ticker=req.ticker,
         historical_date=req.historical_date,
         holding_days=req.holding_days or 90
@@ -250,59 +275,68 @@ async def run_backtest(req: BacktestRequest):
 
 @app.get("/api/telemetry/recent")
 async def get_telemetry_logs():
-    return audit_logger.get_recent_logs()
+    return await asyncio.to_thread(audit_logger.get_recent_logs)
 
-# --- SQLite Persistent CRUD Endpoints ---
+# --- SQLite Persistent Non-Blocking CRUD Endpoints ---
 
 @app.get("/api/user-profile")
 async def get_stored_user_profile():
-    return db_get_user_profile().model_dump()
+    profile = await db_get_user_profile_async()
+    return profile.model_dump()
 
 @app.put("/api/user-profile")
 async def update_stored_user_profile(profile: UserProfileDB):
-    return db_upsert_user_profile(profile).model_dump()
+    saved = await db_upsert_user_profile_async(profile)
+    return saved.model_dump()
 
 @app.get("/api/portfolio/holdings")
 async def get_stored_holdings():
-    return [h.model_dump() for h in db_get_all_holdings()]
+    holdings = await db_get_all_holdings_async()
+    return [h.model_dump() for h in holdings]
 
 @app.post("/api/portfolio/holdings")
 async def upsert_stored_holding(holding: PortfolioHoldingDB):
-    return db_upsert_holding(holding).model_dump()
+    saved = await db_upsert_holding_async(holding)
+    return saved.model_dump()
 
 @app.delete("/api/portfolio/holdings/{ticker}")
 async def delete_stored_holding(ticker: str):
-    success = db_delete_holding(ticker)
+    success = await db_delete_holding_async(ticker)
     if not success:
         raise HTTPException(status_code=404, detail=f"Holding {ticker} not found")
     return {"status": "deleted", "ticker": ticker.upper()}
 
 @app.get("/api/watchlist")
 async def get_user_watchlist():
-    return [w.model_dump() for w in db_get_watchlist()]
+    items = await db_get_watchlist_async()
+    return [w.model_dump() for w in items]
 
 @app.post("/api/watchlist")
 async def add_item_to_watchlist(item: WatchlistDB):
-    return db_add_to_watchlist(item).model_dump()
+    saved = await db_add_to_watchlist_async(item)
+    return saved.model_dump()
 
 @app.delete("/api/watchlist/{ticker}")
 async def remove_item_from_watchlist(ticker: str):
-    success = db_remove_from_watchlist(ticker)
+    success = await db_remove_from_watchlist_async(ticker)
     if not success:
         raise HTTPException(status_code=404, detail=f"Watchlist item {ticker} not found")
     return {"status": "deleted", "ticker": ticker.upper()}
 
 @app.post("/api/memos")
 async def save_decision_memo(memo: DecisionMemoDB):
-    return db_save_memo(memo).model_dump()
+    saved = await db_save_memo_async(memo)
+    return saved.model_dump()
 
 @app.get("/api/memos")
 async def list_decision_memos():
-    return [m.model_dump() for m in db_get_memos()]
+    memos = await db_get_memos_async()
+    return [m.model_dump() for m in memos]
 
 @app.post("/api/rag/upload")
 async def upload_rag_document(req: UploadDocumentRequest):
-    chunks = rag_retriever.ingest_document(
+    chunks = await asyncio.to_thread(
+        rag_retriever.ingest_document,
         ticker=req.ticker,
         document_title=req.document_title,
         section=req.section,
@@ -333,14 +367,16 @@ async def upload_rag_file(
         raise HTTPException(status_code=400, detail="File size exceeds maximum 10MB limit")
 
     if ext == "pdf":
-        chunks = rag_retriever.ingest_pdf(
+        chunks = await asyncio.to_thread(
+            rag_retriever.ingest_pdf,
             pdf_bytes=content_bytes,
             ticker=ticker,
             document_title=document_title or filename
         )
     else:
         text = content_bytes.decode("utf-8", errors="ignore")
-        chunks = rag_retriever.ingest_document(
+        chunks = await asyncio.to_thread(
+            rag_retriever.ingest_document,
             ticker=ticker,
             document_title=document_title or filename,
             section="Uploaded File",

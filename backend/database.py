@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 try:
@@ -286,3 +287,37 @@ def get_memos(limit: int = 20) -> List[DecisionMemoDB]:
                 created_at=row["created_at"]
             ))
     return memos
+
+
+# --- Non-Blocking Asynchronous Database Wrappers ---
+
+async def get_user_profile_async(user_id: str = "default_user") -> UserProfileDB:
+    return await asyncio.to_thread(get_user_profile, user_id)
+
+async def upsert_user_profile_async(profile: UserProfileDB) -> UserProfileDB:
+    return await asyncio.to_thread(upsert_user_profile, profile)
+
+async def get_all_holdings_async() -> List[PortfolioHoldingDB]:
+    return await asyncio.to_thread(get_all_holdings)
+
+async def upsert_holding_async(holding: PortfolioHoldingDB) -> PortfolioHoldingDB:
+    return await asyncio.to_thread(upsert_holding, holding)
+
+async def delete_holding_async(ticker: str) -> bool:
+    return await asyncio.to_thread(delete_holding, ticker)
+
+async def get_watchlist_async() -> List[WatchlistDB]:
+    return await asyncio.to_thread(get_watchlist)
+
+async def add_to_watchlist_async(item: WatchlistDB) -> WatchlistDB:
+    return await asyncio.to_thread(add_to_watchlist, item)
+
+async def remove_from_watchlist_async(ticker: str) -> bool:
+    return await asyncio.to_thread(remove_from_watchlist, ticker)
+
+async def save_memo_async(memo: DecisionMemoDB) -> DecisionMemoDB:
+    return await asyncio.to_thread(save_memo, memo)
+
+async def get_memos_async(limit: int = 20) -> List[DecisionMemoDB]:
+    return await asyncio.to_thread(get_memos, limit)
+

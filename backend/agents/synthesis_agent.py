@@ -1,17 +1,19 @@
 from typing import Dict, Any
+
 try:
     from .llm_client import llm_client
 except (ImportError, ValueError):
     from agents.llm_client import llm_client
 
+
 class SynthesisAgent:
     """
     Synthesis Agent responsible for calculating weighted action recommendations,
     generating headlines, and formulating multi-tiered explanations (Beginner & Expert).
-    Supports Gemini LLM reasoning with generalized deterministic fallback templates.
+    Supports Gemini LLM reasoning with generalized deterministic fallback templates and async networking.
     """
 
-    def synthesize(
+    def _calculate_action_and_weights(
         self,
         ticker: str,
         quant_result: Dict[str, Any],
@@ -27,7 +29,7 @@ class SynthesisAgent:
         has_disagreement = debate_result.get("has_disagreement", False)
         user_risk = behavioral_result.get("user_risk_profile", "moderate")
         price = market_data.get("current_price", 100.0)
-        symbol = market_data.get("symbol", "₹" if ticker.upper() in ["RELIANCE", "TCS", "INFY"] else "$")
+        symbol = market_data.get("symbol", "₹" if ticker.upper() in ["RELIANCE", "TCS", "INFY", "HDFCBANK"] else "$")
 
         # Dynamic weighting
         if rag_timed_out:
@@ -77,50 +79,6 @@ class SynthesisAgent:
             final_action = "SELL"
             headline = f"De-risk Position in {ticker}: Elevated Downside Volatility and High Risk Penalties"
 
-        # Attempt LLM explanations if Gemini API is available
-        llm_exp = llm_client.generate_synthesis_explanations(
-            ticker=ticker,
-            final_action=final_action,
-            quant_score=quant_score,
-            rag_score=rag_score,
-            user_risk=user_risk
-        )
-
-        if llm_exp:
-            expert_exp = llm_exp["expert"]
-            beginner_exp = llm_exp["beginner"]
-        else:
-            # Algorithmic Explanations
-            if rag_timed_out:
-                expert_exp = (
-                    f"Evaluation for {ticker} conducted exclusively via technical momentum indicators (score: {quant_score}/100) "
-                    f"due to upstream filing RAG retrieval timeout. Fundamental weight zeroed out and confidence bounds discounted."
-                )
-                beginner_exp = (
-                    f"Our system could only review {ticker}'s price chart today because corporate filings were temporarily unavailable. "
-                    f"This signal is based on market trend speed only—proceed with extra caution."
-                )
-            elif has_disagreement:
-                expert_exp = (
-                    f"Consensus reflects a cross-agent divergence on {ticker}: Quantitative momentum ({quant_score}/100) conflicts "
-                    f"with fundamental filing disclosures ({rag_score}/100). Behavioral risk filters ({behavioral_score}/100) enforce "
-                    f"capital preservation under a {user_risk} mandate."
-                )
-                beginner_exp = (
-                    f"There is a tug-of-war on {ticker}: the stock price has strong momentum, but the company's financial documents "
-                    f"show warning signs. Because of your {user_risk} investment preference, we recommend a cautious, risk-managed approach."
-                )
-            else:
-                expert_exp = (
-                    f"Synthesized recommendation for {ticker} balances quantitative trend indicators ({quant_score}/100) against "
-                    f"fundamental disclosures ({rag_score}/100), calibrated through a {user_risk} risk budget ({behavioral_score}/100)."
-                )
-                beginner_exp = (
-                    f"We evaluated {ticker}'s market momentum alongside its business health from regulatory filings. "
-                    f"The final signal aligns with your {user_risk} risk comfort zone."
-                )
-
-        # Macro regime profiling
         macro_regimes = {
             "RELIANCE": {
                 "regime_title": "Energy Transition Capex & Retail Competition",
@@ -151,6 +109,11 @@ class SynthesisAgent:
                 "regime_title": "Services Margin Expansion & Ecosystem Moat",
                 "volatility_environment": "Low Beta Blue-Chip",
                 "bias_explanation": "Solid cash generation offsets cyclical hardware replacement cycles."
+            },
+            "HDFCBANK": {
+                "regime_title": "Credit Expansion & Deposit Ratio Normalization",
+                "volatility_environment": "Low-to-Moderate Beta Financial Core",
+                "bias_explanation": "Post-merger loan-to-deposit ratio consolidation supported by high operating margins."
             }
         }
         active_regime = macro_regimes.get(ticker.upper(), {
@@ -164,10 +127,114 @@ class SynthesisAgent:
             "headline": headline,
             "weight_breakdown": weight_breakdown,
             "macro_regime": active_regime,
-            "explain_modes": {
-                "expert": expert_exp,
-                "beginner": beginner_exp
-            }
+            "quant_score": quant_score,
+            "rag_score": rag_score,
+            "behavioral_score": behavioral_score,
+            "rag_timed_out": rag_timed_out,
+            "has_disagreement": has_disagreement,
+            "user_risk": user_risk
         }
+
+    def _build_algorithmic_explanations(self, ticker: str, meta: Dict[str, Any]) -> Dict[str, str]:
+        quant_score = meta["quant_score"]
+        rag_score = meta["rag_score"]
+        behavioral_score = meta["behavioral_score"]
+        user_risk = meta["user_risk"]
+
+        if meta["rag_timed_out"]:
+            expert_exp = (
+                f"Evaluation for {ticker} conducted exclusively via technical momentum indicators (score: {quant_score}/100) "
+                f"due to upstream filing RAG retrieval timeout. Fundamental weight zeroed out and confidence bounds discounted."
+            )
+            beginner_exp = (
+                f"Our system could only review {ticker}'s price chart today because corporate filings were temporarily unavailable. "
+                f"This signal is based on market trend speed only—proceed with extra caution."
+            )
+        elif meta["has_disagreement"]:
+            expert_exp = (
+                f"Consensus reflects a cross-agent divergence on {ticker}: Quantitative momentum ({quant_score}/100) conflicts "
+                f"with fundamental filing disclosures ({rag_score}/100). Behavioral risk filters ({behavioral_score}/100) enforce "
+                f"capital preservation under a {user_risk} mandate."
+            )
+            beginner_exp = (
+                f"There is a tug-of-war on {ticker}: the stock price has strong momentum, but the company's financial documents "
+                f"show warning signs. Because of your {user_risk} investment preference, we recommend a cautious, risk-managed approach."
+            )
+        else:
+            expert_exp = (
+                f"Synthesized recommendation for {ticker} balances quantitative trend indicators ({quant_score}/100) against "
+                f"fundamental disclosures ({rag_score}/100), calibrated through a {user_risk} risk budget ({behavioral_score}/100)."
+            )
+            beginner_exp = (
+                f"We evaluated {ticker}'s market momentum alongside its business health from regulatory filings. "
+                f"The final signal aligns with your {user_risk} risk comfort zone."
+            )
+
+        return {"expert": expert_exp, "beginner": beginner_exp}
+
+    async def synthesize_async(
+        self,
+        ticker: str,
+        quant_result: Dict[str, Any],
+        rag_result: Dict[str, Any],
+        behavioral_result: Dict[str, Any],
+        debate_result: Dict[str, Any],
+        market_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Asynchronously synthesizes signals with non-blocking LLM explanation generation."""
+        meta = self._calculate_action_and_weights(
+            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data
+        )
+
+        llm_exp = await llm_client.generate_synthesis_explanations_async(
+            ticker=ticker,
+            final_action=meta["final_action"],
+            quant_score=meta["quant_score"],
+            rag_score=meta["rag_score"],
+            user_risk=meta["user_risk"]
+        )
+
+        explain_modes = llm_exp if llm_exp else self._build_algorithmic_explanations(ticker, meta)
+
+        return {
+            "final_action": meta["final_action"],
+            "headline": meta["headline"],
+            "weight_breakdown": meta["weight_breakdown"],
+            "macro_regime": meta["macro_regime"],
+            "explain_modes": explain_modes
+        }
+
+    def synthesize(
+        self,
+        ticker: str,
+        quant_result: Dict[str, Any],
+        rag_result: Dict[str, Any],
+        behavioral_result: Dict[str, Any],
+        debate_result: Dict[str, Any],
+        market_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Synchronously synthesizes signals for legacy or test callers."""
+        meta = self._calculate_action_and_weights(
+            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data
+        )
+
+        llm_exp = llm_client.generate_synthesis_explanations(
+            ticker=ticker,
+            final_action=meta["final_action"],
+            quant_score=meta["quant_score"],
+            rag_score=meta["rag_score"],
+            user_risk=meta["user_risk"]
+        )
+
+        explain_modes = llm_exp if llm_exp else self._build_algorithmic_explanations(ticker, meta)
+
+        return {
+            "final_action": meta["final_action"],
+            "headline": meta["headline"],
+            "weight_breakdown": meta["weight_breakdown"],
+            "macro_regime": meta["macro_regime"],
+            "explain_modes": explain_modes
+        }
+
 
 synthesis_agent = SynthesisAgent()

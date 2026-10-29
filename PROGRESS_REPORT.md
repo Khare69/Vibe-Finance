@@ -137,18 +137,22 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 4: Backend Architecture, State Orchestration & Security Hardening
-*Status: [ ] Pending*
+*Status: [-] In Progress*
 
-* **Sub-phase 4.1: Async Event Loop & Network Optimization**
-  * Target: `backend/main.py`, `backend/agents/llm_client.py`, `backend/database.py`
-  * Replace synchronous `httpx.Client` with `httpx.AsyncClient`; run parallel agent tasks via `asyncio.gather`.
-  * Ensure non-blocking database access.
-* **Sub-phase 4.2: API Security & Clean Packaging**
+* **Sub-phase 4.1: Async Event Loop & Network Optimization** [x] Completed
+  * Target: `backend/main.py`, `backend/agents/llm_client.py`, `backend/agents/rag_agent.py`, `backend/agents/quant_agent.py`, `backend/agents/behavioral_agent.py`, `backend/agents/debate_engine.py`, `backend/agents/synthesis_agent.py`, `backend/database.py`
+  * Upgraded `LLMAgentClient` with persistent non-blocking `httpx.AsyncClient` connection pooling and graceful FastAPI lifespan shutdown.
+  * Implemented parallel agent orchestration via `asyncio.gather` for Quant, RAG, and Behavioral Risk agents, cutting sequential latency bottlenecks.
+  * Added non-blocking asynchronous execution interfaces across all agents (`analyze_async`, `conduct_debate_async`, `synthesize_async`).
+  * Built non-blocking async SQLite database wrappers (`*_async`) using `asyncio.to_thread` across all user profile, portfolio, watchlist, and decision memo endpoints.
+  * Offloaded blocking CPU and network I/O (`yfinance` downloads, PyMuPDF parsing, vector scoring) to background worker threads.
+  * Verified via dedicated test suite `backend/tests/test_async_orchestration.py` and confirmed all 19 test scenarios in `backend/test_suite.py` pass with 100% accuracy.
+* **Sub-phase 4.2: API Security & Clean Packaging** [ ] Pending
   * Target: `backend/`
   * Pass Gemini API keys via `x-goog-api-key` header (remove keys from URL query strings).
   * Fix CORS policy: restrict origins to frontend hosts (`http://localhost:5173`) when credentials are enabled.
   * Standardize package imports, eliminating duplicated `try/except ImportError` blocks.
-* **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)**
+* **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)** [ ] Pending
   * Target: `backend/agents/`
   * Structure agent orchestration into a typed cyclic directed graph (`StateGraph`) with explicit bull-vs-bear debate cycles and circuit breakers.
 
@@ -202,3 +206,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 29, 2026 | Phase 3.1 | Built walk-forward point-in-time historical simulation engine (deleted static benchmark dict; zero look-ahead bias). | Completed |
 | Oct 29, 2026 | Phase 3.2 | Added institutional risk metrics: CAGR, Max Drawdown, Sharpe, Sortino, and Benchmark Alpha (Nifty 50 / S&P 500). | Completed |
 | Oct 29, 2026 | Phase 3.3 | Integrated dynamic backtest UI: equity curve chart with Recharts, risk badges, point-in-time barometer, and currency detection. | Completed |
+| Oct 29, 2026 | Phase 4.1 | Non-blocking async event loop: `httpx.AsyncClient` pool, parallel `asyncio.gather` agent tasks, and async DB wrappers. | Completed |

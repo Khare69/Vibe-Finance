@@ -1,5 +1,6 @@
 import time
 import re
+import asyncio
 from typing import Dict, Any, List, Optional
 
 try:
@@ -72,6 +73,85 @@ class RAGAgent:
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
 
         # Format citations to adhere strictly to API_CONTRACTS
+        formatted_citations = []
+        for c in citations:
+            formatted_citations.append({
+                "id": c["id"],
+                "document_title": c["document_title"],
+                "source_type": c["source_type"],
+                "section": c["section"],
+                "excerpt": c["excerpt"],
+                "relevance_score": c["relevance_score"]
+            })
+
+        return {
+            "name": "Fundamental Researcher",
+            "stance": stance,
+            "score": score,
+            "latency_ms": elapsed_ms,
+            "timed_out": False,
+            "key_findings": key_findings,
+            "citations": formatted_citations
+        }
+
+    async def analyze_async(self, ticker: str, simulated_rag_timeout: bool = False) -> Dict[str, Any]:
+        """
+        Asynchronously retrieves vector citations and extracts fundamental evidence
+        via non-blocking LLM networking and worker threads.
+        """
+        start_time = time.perf_counter()
+        ticker_up = ticker.upper()
+
+        if simulated_rag_timeout:
+            return {
+                "name": "Fundamental Researcher",
+                "stance": "NEUTRAL",
+                "score": 50,
+                "latency_ms": 5000,
+                "timed_out": True,
+                "key_findings": [
+                    "Fundamental RAG retrieval timed out after 5000ms threshold; fundamental analysis pending.",
+                    "Proceeding with technical momentum and risk constraints only."
+                ],
+                "citations": []
+            }
+
+        # 1. Search Vector Knowledge Base non-blockingly via worker thread
+        search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
+        search_res = await asyncio.to_thread(rag_retriever.search, ticker=ticker_up, query=search_query, top_k=3)
+        citations = search_res.get("citations", [])
+
+        # If ticker is uncataloged and has no documents
+        if not citations:
+            elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
+            return {
+                "name": "Fundamental Researcher",
+                "stance": "NEUTRAL",
+                "score": 50,
+                "latency_ms": elapsed_ms,
+                "timed_out": False,
+                "key_findings": [
+                    f"No regulatory filings or earnings transcripts currently indexed for {ticker_up}.",
+                    "Fundamental score defaulted to neutral baseline pending corporate filing upload.",
+                    "Upload 10-K/10-Q or earnings transcripts via the Ingestion panel to enable grounded research."
+                ],
+                "citations": []
+            }
+
+        # 2. Asynchronous non-blocking LLM-driven evidence extraction
+        llm_analysis = await llm_client.extract_fundamental_evidence_async(ticker=ticker_up, citations=citations)
+
+        if llm_analysis:
+            score = llm_analysis["score"]
+            stance = llm_analysis["stance"]
+            key_findings = llm_analysis["key_findings"]
+        else:
+            # 3. Deterministic Evidence Extraction Engine (Offline Fallback)
+            score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
+
+        elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
+
+        # Format citations
         formatted_citations = []
         for c in citations:
             formatted_citations.append({

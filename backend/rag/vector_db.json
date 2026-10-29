@@ -280,5 +280,37 @@
       "climb",
       "robust"
     ]
+  },
+  {
+    "id": "msft-upload-1793265554-17",
+    "ticker": "MSFT",
+    "document_title": "Q2 Earnings Report",
+    "source_type": "USER_UPLOAD",
+    "fiscal_period": "Q3 FY26",
+    "section": "Cloud Performance - Page 4",
+    "excerpt": "Microsoft Cloud quarterly revenue topped $38.9 billion, climbing 22% YoY fueled by Azure AI infrastructure. Operating income rose 15% with robust commercial bookings backlog surpassing $250 billion.",
+    "sentiment": "positive",
+    "relevance_base": 0.88,
+    "keywords": [
+      "surpassing",
+      "rose",
+      "climbing",
+      "climb",
+      "robust"
+    ]
+  },
+  {
+    "id": "amd-upload-1793265875-18",
+    "ticker": "AMD",
+    "document_title": "AMD Form 10-K Annual Report",
+    "source_type": "USER_UPLOAD",
+    "fiscal_period": "Q3 FY26",
+    "section": "Item 7 MD&A",
+    "excerpt": "Data Center enterprise EPYC processor sales expanded 122% YoY, driving record server market share gains.",
+    "sentiment": "positive",
+    "relevance_base": 0.88,
+    "keywords": [
+      "record"
+    ]
   }
 ]

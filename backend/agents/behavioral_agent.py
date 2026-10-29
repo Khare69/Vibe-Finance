@@ -93,4 +93,9 @@ class BehavioralAgent:
             "behavioral_adjustments": adjustments
         }
 
+    async def analyze_async(self, ticker: str, user_profile: Dict[str, Any], market_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Asynchronous interface for parallel agent execution."""
+        return self.analyze(ticker, user_profile, market_data)
+
+
 behavioral_agent = BehavioralAgent()
