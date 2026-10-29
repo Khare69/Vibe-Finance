@@ -120,9 +120,11 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
   * Built point-in-time walk-forward historical simulation engine pulling 2-year OHLCV data.
   * Point-in-time isolation enforces zero look-ahead bias: indicators (RSI-14, 50-SMA, 200-SMA, MACD, Volume Anomaly) and fundamental filings are computed strictly on data known on or prior to the simulation date.
   * Verified across multiple historical dates and assets with dynamic trajectory tracking.
-* **Sub-phase 3.2: Financial Performance & Risk Metrics** [ ] Pending
+* **Sub-phase 3.2: Financial Performance & Risk Metrics** [x] Completed
   * Target: `backend/backtest/simulator.py`
-  * Compute standard quantitative metrics: CAGR, Maximum Drawdown, Sharpe Ratio, Sortino Ratio, Win Rate, and Benchmark Alpha (vs. Nifty 50 / S&P 500).
+  * Computed institutional quantitative metrics: CAGR, Maximum Drawdown (MDD), Annualized Volatility, Sharpe Ratio (risk-free rate adjusted), and Sortino Ratio (downside deviation).
+  * Implemented real benchmark alpha tracking against NIFTY 50 (`^NSEI`) for Indian equities and S&P 500 (`^GSPC`) for US equities over identical time horizons.
+  * Verified across NVDA, RELIANCE, and TCS with daily return trajectories and win rates.
 * **Sub-phase 3.3: Frontend Backtest UI Integration** [ ] Pending
   * Target: `frontend/src/components/BacktestSimulator.jsx`
   * Connect interactive date pickers and parameter controls to the dynamic backtest API, rendering real historical equity curves.
@@ -193,3 +195,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 28, 2026 | Phase 2.2 | Retired `TICKER_FUNDAMENTAL_PROFILES`; built dynamic LLM extraction with secure auth and deterministic fallback. | Completed |
 | Oct 28, 2026 | Phase 2.3 | Added prompt-injection sanitization and `/api/rag/upload-file` supporting PDF parsing via PyMuPDF. | Completed |
 | Oct 29, 2026 | Phase 3.1 | Built walk-forward point-in-time historical simulation engine (deleted static benchmark dict; zero look-ahead bias). | Completed |
+| Oct 29, 2026 | Phase 3.2 | Added institutional risk metrics: CAGR, Max Drawdown, Sharpe, Sortino, and Benchmark Alpha (Nifty 50 / S&P 500). | Completed |
