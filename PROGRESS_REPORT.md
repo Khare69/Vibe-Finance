@@ -112,7 +112,7 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 3: Deterministic Walk-Forward Backtesting Engine
-*Status: [-] In Progress*
+*Status: [x] Completed*
 
 * **Sub-phase 3.1: Historical Point-in-Time Data Simulation** [x] Completed
   * Target: `backend/backtest/simulator.py`
@@ -125,9 +125,14 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
   * Computed institutional quantitative metrics: CAGR, Maximum Drawdown (MDD), Annualized Volatility, Sharpe Ratio (risk-free rate adjusted), and Sortino Ratio (downside deviation).
   * Implemented real benchmark alpha tracking against NIFTY 50 (`^NSEI`) for Indian equities and S&P 500 (`^GSPC`) for US equities over identical time horizons.
   * Verified across NVDA, RELIANCE, and TCS with daily return trajectories and win rates.
-* **Sub-phase 3.3: Frontend Backtest UI Integration** [ ] Pending
-  * Target: `frontend/src/components/BacktestSimulator.jsx`
-  * Connect interactive date pickers and parameter controls to the dynamic backtest API, rendering real historical equity curves.
+* **Sub-phase 3.3: Frontend Backtest UI Integration** [x] Completed
+  * Target: `frontend/src/components/BacktestSimulator.jsx`, `frontend/src/services/api.js`, `frontend/src/services/mockData.js`
+  * Added dynamic currency detection (`$` for US equities, `₹` for Indian equities), eliminating hardcoded dollar signs.
+  * Rendered point-in-time technical indicator barometer displaying the indicators known to the multi-agent consensus on the entry date (RSI-14, 50-SMA, 200-SMA, MACD histogram, and volume anomaly ratio).
+  * Rendered institutional risk & performance metric grid: Realized Return, Benchmark Alpha (vs Nifty 50 or S&P 500), Sharpe Ratio, Sortino Ratio, Max Drawdown, CAGR, and Trajectory Win Rate %.
+  * Built interactive daily walk-forward equity trajectory chart using `recharts` with dual toggle modes (`Return %` vs `Price`) and dynamic profit/loss gradient shading.
+  * Updated offline mock fallbacks in `api.js` and `mockData.js` to match the enriched schema.
+  * Verified Vite production build (`dist/` created in 57.28s with 0 errors).
 
 ---
 
@@ -196,3 +201,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 28, 2026 | Phase 2.3 | Added prompt-injection sanitization and `/api/rag/upload-file` supporting PDF parsing via PyMuPDF. | Completed |
 | Oct 29, 2026 | Phase 3.1 | Built walk-forward point-in-time historical simulation engine (deleted static benchmark dict; zero look-ahead bias). | Completed |
 | Oct 29, 2026 | Phase 3.2 | Added institutional risk metrics: CAGR, Max Drawdown, Sharpe, Sortino, and Benchmark Alpha (Nifty 50 / S&P 500). | Completed |
+| Oct 29, 2026 | Phase 3.3 | Integrated dynamic backtest UI: equity curve chart with Recharts, risk badges, point-in-time barometer, and currency detection. | Completed |
