@@ -418,3 +418,22 @@ async def upload_rag_file(
 async def evaluate_rag_faithfulness():
     """Runs automated RAG evaluation benchmark checking faithfulness, citation relevance, and negative control abstention."""
     return await asyncio.to_thread(rag_evaluator.run_benchmark_suite)
+
+# --- Static Frontend SPA Mounting (Single-Container Production Support) ---
+frontend_dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+if os.path.exists(frontend_dist_dir):
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    assets_path = os.path.join(frontend_dist_dir, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="frontend-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa_frontend(full_path: str):
+        if full_path.startswith("api") or full_path in ("docs", "redoc", "openapi.json"):
+            raise HTTPException(status_code=404, detail="Resource not found")
+        requested_file = os.path.join(frontend_dist_dir, full_path)
+        if full_path and os.path.isfile(requested_file):
+            return FileResponse(requested_file)
+        return FileResponse(os.path.join(frontend_dist_dir, "index.html"))

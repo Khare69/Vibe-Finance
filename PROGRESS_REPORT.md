@@ -199,7 +199,7 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 6: Automated Evaluation, Test Suite Overhaul & CI/CD
-*Status: [ ] In Progress*
+*Status: [x] Completed*
 
 * **Sub-phase 6.1: Comprehensive Test Suite Overhaul & Mathematical Properties** [x] Completed
   * Target: `backend/test_suite.py`, `backend/tests/test_mathematical_properties.py`, `backend/data/market_service.py`
@@ -219,9 +219,13 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
     * **Negative Control Abstention:** Validated $100\%$ abstention and ungrounded claim rejection when queried on unsupported or out-of-domain tickers.
   * Added REST endpoint `GET /api/rag/evaluate` returning full evaluation metrics across multiple test benchmarks.
   * Integrated as Scenario 21 in `backend/test_suite.py` — verified all 21 test scenarios pass with 100% accuracy.
-* **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow** [ ] Pending
-  * Target: `.github/workflows/ci.yml`, `Dockerfile`, `docker-compose.yml`
-  * Automate linting, testing, and containerized deployment verification.
+* **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow** [x] Completed
+  * Target: `.github/workflows/ci.yml`, `Dockerfile`, `Dockerfile.frontend`, `docker-compose.yml`, `frontend/nginx.conf`, `.dockerignore`, `backend/main.py`
+  * Multi-stage root `Dockerfile` packaging Node 20 builder and Python 3.11 runner into a lightweight, secure container with automated healthcheck (`/api/health`).
+  * `docker-compose.yml` orchestrating both the FastAPI backend (port 8000) and decoupled React/Nginx frontend (port 5173/80) with automatic service health dependency resolution and volume mounts.
+  * `.github/workflows/ci.yml` pipeline automating backend test suite execution (21/21 scenarios), syntax and quality linting (flake8), frontend production bundle build (`npm run build`), and Docker image build verification on `main` and `debugging` branches.
+  * Added static SPA file serving fallback in `backend/main.py` enabling unified single-container deployment.
+  * Verified end-to-end test suite (100% pass) and production build.
 
 ---
 
@@ -250,3 +254,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 30, 2026 | Phase 5.3 | Portfolio Stress-Testing & SEBI Compliance Guardrails: 4 macro shock scenarios, holding breakdown table, cash runway, and statutory disclaimers. | Completed |
 | Oct 30, 2026 | Phase 6.1 | Comprehensive Test Suite Overhaul: mathematical invariance tests for RSI, MACD, Volume Anomaly, CAGR, drawdown, portfolio conservation laws, and expanded test runner (20/20 passing). | Completed |
 | Oct 30, 2026 | Phase 6.2 | RAG Faithfulness & Citation Evaluation: RAGEvaluator harness, numerical entity preservation, negative control abstention, /api/rag/evaluate, and test scenario 21 (21/21 passing). | Completed |
+| Oct 30, 2026 | Phase 6.3 | Dockerization & GitHub Actions CI Workflow: multi-stage Dockerfile, docker-compose.yml, nginx proxy, .dockerignore, single-container SPA fallback, and .github/workflows/ci.yml pipeline. | Completed |

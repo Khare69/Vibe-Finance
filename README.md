@@ -88,14 +88,30 @@ cp .env.example .env
 ```
 *(Optional: Add `GEMINI_API_KEY` for live generative LLM synthesis. If omitted, the platform runs seamlessly on its built-in deterministic engine.)*
 
-### 2. Start the Backend (FastAPI)
+### 2. Start with Docker / Docker Compose (Recommended)
+
+Run the full platform in a single command with Docker Compose:
 ```bash
-cd backend
-python -m uvicorn main:app --port 8000 --reload
+docker compose up --build
+```
+* **Frontend Dashboard:** [http://localhost:5173](http://localhost:5173) (or `http://localhost:8000` via unified container)
+* **Backend API & Swagger Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+
+Alternatively, run the production multi-stage standalone container:
+```bash
+docker build -t vibe-finance .
+docker run -p 8000:8000 vibe-finance
+```
+
+### 3. Local Development Mode
+
+#### A. Start the Backend (FastAPI)
+```bash
+python -m uvicorn backend.main:app --port 8000 --reload
 ```
 Interactive API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 3. Start the Frontend (React + Vite)
+#### B. Start the Frontend (React + Vite)
 In a separate terminal:
 ```bash
 cd frontend
@@ -113,7 +129,7 @@ Run the full end-to-end multi-agent test suite:
 python -u backend/test_suite.py
 ```
 
-### All 19 Test Scenarios Verified:
+### All 21 Test Scenarios Verified (100% Passing):
 1. **Health Endpoint:** Degradation checks and live feed status.
 2. **Tracked Equities:** Indian & US universe discovery.
 3. **Multi-Agent Consensus:** Adversarial friction and action synthesis.
@@ -133,3 +149,5 @@ python -u backend/test_suite.py
 17. **Dynamic Generalized Debate:** Dynamic adversarial synthesis on arbitrary tickers (e.g. AMD).
 18. **Dynamic RAG Ingestion:** Instant chunking, polarity scoring, and citation indexing.
 19. **Persistent SQLite REST Integration:** Verified profile and memo endpoints.
+20. **Mathematical Properties & Invariance Benchmarks:** RSI boundary monotonicity, moving average identities, Volume Anomaly ratios, CAGR & Max Drawdown formulas, and portfolio conservation laws.
+21. **RAG Faithfulness & Citation Evaluation:** Contextual grounding, numerical entity precision ($100\%$), institutional hallucination tolerance ($\le 0.05$), and negative control prompt rejection.

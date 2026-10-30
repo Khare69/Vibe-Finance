@@ -1,5 +1,5 @@
 @echo off
 echo Starting Vibe Finance Backend (FastAPI on http://localhost:8000)...
-cd backend
-python -m uvicorn main:app --port 8000 --reload
+set PYTHONPATH=%CD%
+python -m uvicorn backend.main:app --port 8000 --reload
 pause
