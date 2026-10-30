@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import time
 import asyncio
 from contextlib import asynccontextmanager
@@ -7,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.data.market_service import market_service
@@ -158,6 +160,45 @@ async def get_orchestrator_topology():
         ],
         "state_schema": list(MultiAgentState.model_fields.keys())
     }
+
+@app.get("/api/analysis/stream/{ticker}")
+async def stream_analysis(
+    ticker: str,
+    risk_level: Optional[str] = "conservative",
+    simulated_stale_data: Optional[bool] = False,
+    simulated_rag_timeout: Optional[bool] = False
+):
+    """
+    Streams multi-agent state graph transitions, analyst findings, debate turns,
+    and final consensus synthesis via Server-Sent Events (SSE).
+    """
+    safe_ticker = sanitize_ticker(ticker)
+    initial_state = MultiAgentState(
+        ticker=safe_ticker,
+        user_profile={"risk_level": risk_level or "conservative"},
+        simulated_stale_data=bool(simulated_stale_data),
+        simulated_rag_timeout=bool(simulated_rag_timeout)
+    )
+
+    async def sse_event_generator():
+        try:
+            async for event in multi_agent_graph.stream_execute(initial_state):
+                event_type = event["type"]
+                event_data = json.dumps(event["payload"])
+                yield f"event: {event_type}\ndata: {event_data}\n\n"
+        except Exception as e:
+            err_data = json.dumps({"error": str(e)})
+            yield f"event: error\ndata: {err_data}\n\n"
+
+    return StreamingResponse(
+        sse_event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.post("/api/analyze")
 async def analyze_stock(req: AnalyzeRequest):

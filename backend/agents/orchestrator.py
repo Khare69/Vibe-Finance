@@ -294,6 +294,163 @@ class MultiAgentStateGraph:
         state.current_node = "COMPLETED"
         return state
 
+    async def stream_execute(self, state: MultiAgentState):
+        """
+        Executes the state graph and asynchronously yields Server-Sent Events (SSE)
+        for real-time streaming telemetry, agent thoughts, debate dialogue, and synthesis.
+        """
+        overall_start = time.perf_counter()
+
+        # Event: Pipeline Started
+        yield {
+            "type": "pipeline_started",
+            "payload": {
+                "ticker": state.ticker,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "node": "fetch_market_context"
+            }
+        }
+
+        # Step 1: Ingest Market Context
+        state = await self.node_fetch_market_context(state)
+        yield {
+            "type": "market_context_loaded",
+            "payload": {
+                "ticker": state.ticker,
+                "company_name": state.company_name,
+                "price": state.market_data.get("current_price"),
+                "change_percent": state.market_data.get("change_percent"),
+                "feed_status": state.market_data.get("feed_status")
+            }
+        }
+
+        # Step 2: Parallel Analysts Started
+        yield {
+            "type": "analysts_started",
+            "payload": {
+                "message": "Initiating parallel multi-agent evaluation (Quantitative, RAG, Behavioral Risk)...",
+                "node": "parallel_analysts"
+            }
+        }
+        state = await self.node_parallel_analysts(state)
+        yield {
+            "type": "analysts_completed",
+            "payload": {
+                "quant": {
+                    "stance": state.quant_result.get("stance"),
+                    "score": state.quant_result.get("score"),
+                    "signals": state.quant_result.get("signals", [])[:2]
+                },
+                "rag": {
+                    "stance": state.rag_result.get("stance"),
+                    "score": state.rag_result.get("score"),
+                    "citations_count": len(state.rag_result.get("citations", [])),
+                    "key_findings": state.rag_result.get("key_findings", [])[:2]
+                },
+                "behavioral_risk": {
+                    "stance": state.behavioral_result.get("stance"),
+                    "score": state.behavioral_result.get("score"),
+                    "adjustments": state.behavioral_result.get("behavioral_adjustments", [])[:2]
+                }
+            }
+        }
+
+        # Step 3: Conduct Initial Debate
+        yield {
+            "type": "debate_started",
+            "payload": {
+                "message": "Arbitrating adversarial debate and cross-agent signal alignment...",
+                "node": "adversarial_debate"
+            }
+        }
+        state = await self.node_adversarial_debate(state)
+        for turn in state.debate_result.get("dialogue_steps", []):
+            yield {
+                "type": "debate_turn",
+                "payload": turn
+            }
+
+        # Step 4: Cyclical Convergence Guard Loop
+        while True:
+            state = await self.node_convergence_guard(state)
+            if state.is_converged or state.debate_cycles >= state.max_cycles:
+                yield {
+                    "type": "convergence_reached",
+                    "payload": {
+                        "is_converged": True,
+                        "debate_cycles": state.debate_cycles,
+                        "confidence_calibration_score": state.debate_result.get("confidence_calibration_score")
+                    }
+                }
+                break
+
+            # Cyclic edge: trigger adversarial rebuttal round
+            yield {
+                "type": "rebuttal_triggered",
+                "payload": {
+                    "cycle": state.debate_cycles + 1,
+                    "reason": "Divergence between quantitative momentum and fundamental disclosures exceeds threshold."
+                }
+            }
+            state = await self.node_adversarial_rebuttal(state)
+            rebuttal_turns = state.debate_result.get("dialogue_steps", [])
+            if rebuttal_turns:
+                yield {
+                    "type": "debate_turn",
+                    "payload": rebuttal_turns[-1]
+                }
+
+        # Step 5: Multi-Factor Synthesis
+        yield {
+            "type": "synthesis_started",
+            "payload": {
+                "message": "Formulating multi-factor capital allocation and multi-tiered explanations...",
+                "node": "synthesis"
+            }
+        }
+        state = await self.node_synthesis(state)
+        yield {
+            "type": "synthesis_completed",
+            "payload": {
+                "final_action": state.synthesis_result.get("final_action"),
+                "headline": state.synthesis_result.get("headline"),
+                "weights": state.synthesis_result.get("weight_breakdown"),
+                "explain_modes": state.synthesis_result.get("explain_modes")
+            }
+        }
+
+        # Step 6: Telemetry Audit
+        total_ms = max(int((time.perf_counter() - overall_start) * 1000), 1)
+        state = await self.node_telemetry(state, total_ms)
+        state.current_node = "COMPLETED"
+
+        # Final complete payload
+        yield {
+            "type": "complete",
+            "payload": {
+                "ticker": state.ticker,
+                "company_name": state.company_name,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "price_data": {
+                    "current_price": state.market_data.get("current_price", 100.0),
+                    "change_percent": state.market_data.get("change_percent", 0.0),
+                    "volume_anomaly_ratio": state.market_data.get("volume_anomaly_ratio", 1.0),
+                    "feed_status": state.market_data.get("feed_status", "LIVE"),
+                    "confidence_penalty": state.market_data.get("confidence_penalty", 0.0)
+                },
+                "agents": {
+                    "quant": state.quant_result,
+                    "rag": state.rag_result,
+                    "behavioral_risk": state.behavioral_result
+                },
+                "debate": state.debate_result,
+                "synthesis": state.synthesis_result,
+                "sentiment_shift": state.sentiment_shift,
+                "telemetry": state.telemetry,
+                "execution_trace": state.execution_trace
+            }
+        }
+
 
 # Global orchestrator instance
 multi_agent_graph = MultiAgentStateGraph()

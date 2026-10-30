@@ -20,6 +20,7 @@ import {
   checkSystemHealth,
   getStocks,
   runMultiAgentAnalysis,
+  streamMultiAgentAnalysis,
   getPortfolio,
   getStoredUserProfile,
   updateStoredUserProfile,
@@ -60,6 +61,10 @@ export default function App() {
   const [staleMode, setStaleMode] = useState(false);
   const [ragTimeoutMode, setRagTimeoutMode] = useState(false);
 
+  // Streaming Telemetry & Execution State
+  const [streamEvents, setStreamEvents] = useState([]);
+  const [streamStep, setStreamStep] = useState('');
+
   // Initialize data on mount
   useEffect(() => {
     async function init() {
@@ -79,26 +84,75 @@ export default function App() {
     init();
   }, []);
 
-  // Fetch / run analysis whenever ticker, profile, or fault toggles change
+  // Fetch / stream analysis whenever ticker, profile, or fault toggles change
   useEffect(() => {
+    let isCancelled = false;
+
     async function fetchAnalysis() {
       setIsLoading(true);
+      setStreamEvents([]);
+      setStreamStep(`Connecting live state graph stream for ${selectedTicker}...`);
+
       try {
-        const result = await runMultiAgentAnalysis({
+        const result = await streamMultiAgentAnalysis({
           ticker: selectedTicker,
           userProfile,
           explainMode,
           simulatedStaleData: staleMode,
           simulatedRagTimeout: ragTimeoutMode,
+          onEvent: (event) => {
+            if (isCancelled) return;
+            setStreamEvents((prev) => [...prev, event]);
+
+            if (event.type === 'pipeline_started') {
+              setStreamStep(`Fetching live market feed & OHLCV history for ${event.payload?.ticker || selectedTicker}...`);
+            } else if (event.type === 'market_context_loaded') {
+              setStreamStep(`Market context verified. Launching parallel quantitative, vector RAG & risk agents...`);
+            } else if (event.type === 'analysts_started') {
+              setStreamStep('Evaluating RSI momentum, SEC/SEBI vector filings, and behavioral profile...');
+            } else if (event.type === 'analysts_completed') {
+              setStreamStep('Analyst evaluations complete. Commencing adversarial debate...');
+            } else if (event.type === 'debate_started') {
+              setStreamStep('Arbitrating multi-turn adversarial debate between Quant and Fundamental RAG...');
+            } else if (event.type === 'debate_turn') {
+              setStreamStep(`Debate Turn: ${event.payload?.speaker} arguing stance...`);
+            } else if (event.type === 'rebuttal_triggered') {
+              setStreamStep(`Divergence detected: Triggering cyclic rebuttal round (Cycle ${event.payload?.cycle})...`);
+            } else if (event.type === 'convergence_reached') {
+              setStreamStep('Signal convergence reached. Synthesizing multi-factor consensus action...');
+            } else if (event.type === 'synthesis_started') {
+              setStreamStep('Synthesizing capital allocation, explainability modes & audit metrics...');
+            } else if (event.type === 'complete') {
+              setStreamStep('Analysis complete.');
+            }
+          },
+          onError: (err) => {
+            console.warn('Streaming telemetry fallback active:', err);
+          },
+          onComplete: (data) => {
+            if (!isCancelled && data) {
+              setAnalysis(data);
+            }
+          },
         });
-        setAnalysis(result);
+
+        if (!isCancelled && result) {
+          setAnalysis(result);
+        }
       } catch (err) {
         console.error('Failed to run analysis:', err);
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
+
     fetchAnalysis();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [selectedTicker, userProfile, staleMode, ragTimeoutMode]);
 
   const handleResetFaults = () => {
@@ -141,15 +195,36 @@ export default function App() {
           isLoading={isLoading}
         />
 
+        {/* Live Streaming Status Banner when re-analyzing or loading */}
+        {isLoading && (
+          <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3.5 flex items-center justify-between animate-pulse text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              <div>
+                <span className="font-semibold text-white block">
+                  Live Agent State Machine Streaming ({selectedTicker}):
+                </span>
+                <span className="text-indigo-300 font-mono text-[11px]">
+                  {streamStep || 'Orchestrator arbitrating agents...'}
+                </span>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-indigo-400 bg-indigo-900/40 px-2.5 py-1 rounded-full border border-indigo-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+              <span>{streamEvents.length} SSE events received</span>
+            </div>
+          </div>
+        )}
+
         {/* Loading Overlay or Price Banner */}
         {isLoading && !analysis ? (
-          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-12 text-center animate-pulse">
+          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-12 text-center">
             <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <h3 className="text-base font-bold text-white">
               Agents Analyzing {selectedTicker}...
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Quant calculating momentum · RAG scanning SEC/SEBI filings · Risk Manager evaluating constraints
+            <p className="text-xs text-indigo-300 mt-2 font-mono">
+              {streamStep}
             </p>
           </div>
         ) : (
@@ -261,6 +336,7 @@ export default function App() {
         telemetry={analysis?.telemetry}
         agents={analysis?.agents}
         rawAnalysis={analysis}
+        streamEvents={streamEvents}
       />
 
       {/* Exportable Investment Decision Memo Modal */}

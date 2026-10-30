@@ -22,9 +22,10 @@ export default function DeveloperAuditDrawer({
   telemetry,
   agents,
   rawAnalysis,
+  streamEvents = [],
 }) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'rag' | 'json'
+  const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'stream' | 'rag' | 'json'
 
   // RAG upload state
   const [uploadTicker, setUploadTicker] = useState('RELIANCE');
@@ -105,6 +106,16 @@ export default function DeveloperAuditDrawer({
             }`}
           >
             Latency & Pipeline Metrics
+          </button>
+          <button
+            onClick={() => setActiveTab('stream')}
+            className={`pb-2.5 font-semibold transition-colors border-b-2 ${
+              activeTab === 'stream'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            StateGraph & Live Stream
           </button>
           <button
             onClick={() => setActiveTab('rag')}
@@ -231,6 +242,89 @@ export default function DeveloperAuditDrawer({
                 </div>
               )}
             </>
+          ) : activeTab === 'stream' ? (
+            <div className="space-y-4 text-xs">
+              {/* Header Info */}
+              <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-1">
+                <div className="font-bold text-white flex items-center gap-1.5 text-sm">
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  StateGraph Orchestrator & Live SSE Telemetry
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Real-time Server-Sent Events emitted across state machine graph transitions: Market Context &rarr; Parallel Analysts &rarr; Debate Arbitration &rarr; Convergence Guard &rarr; Synthesis.
+                </p>
+              </div>
+
+              {/* StateGraph Execution Trace */}
+              {rawAnalysis?.execution_trace && rawAnalysis.execution_trace.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                    State Graph Node Execution Trace
+                  </span>
+                  <div className="space-y-1.5">
+                    {rawAnalysis.execution_trace.map((step, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-lg bg-slate-900/50 border border-slate-800/80 flex items-center justify-between font-mono"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-[10px] font-bold">
+                            {idx + 1}
+                          </span>
+                          <span className="font-semibold text-slate-200">{step.node}</span>
+                          <span className="text-[10px] text-slate-500 uppercase px-1.5 py-0.5 rounded bg-slate-800">
+                            {step.status}
+                          </span>
+                        </div>
+                        <span className="text-emerald-400 font-bold">{step.duration_ms} ms</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Live SSE Stream Event Feed */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                    Server-Sent Event (SSE) Stream Feed ({streamEvents.length} events)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    LIVE_SOCKET
+                  </span>
+                </div>
+
+                {streamEvents.length === 0 ? (
+                  <div className="p-4 rounded-xl bg-slate-900/30 border border-dashed border-slate-800 text-center text-slate-500">
+                    No active stream events captured for this session yet. Events are recorded during analysis execution.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                    {streamEvents.map((evt, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/90 text-[11px] font-mono space-y-1"
+                      >
+                        <div className="flex justify-between items-center text-slate-400">
+                          <span className="text-indigo-400 font-bold">
+                            event: <span className="text-emerald-400">{evt.type}</span>
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : `#${idx + 1}`}
+                          </span>
+                        </div>
+                        <div className="text-slate-300 bg-slate-900/80 p-2 rounded overflow-x-auto text-[10px] text-slate-300">
+                          {typeof evt.payload === 'object'
+                            ? JSON.stringify(evt.payload, null, 2)
+                            : String(evt.payload)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : activeTab === 'rag' ? (
             <div className="space-y-4 text-xs">
               <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-1">

@@ -166,15 +166,20 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 5: Streaming Telemetry & Frontend Experience
-*Status: [ ] Pending*
+*Status: [ ] In Progress*
 
-* **Sub-phase 5.1: Server-Sent Events (SSE) Streaming Telemetry**
-  * Target: `backend/main.py`, `frontend/src/`
-  * Add `/api/analysis/stream/{ticker}` streaming agent thoughts, indicator computations, and debate turns in real time.
-* **Sub-phase 5.2: Evidence Explorer UI**
+* **Sub-phase 5.1: Server-Sent Events (SSE) Streaming Telemetry** [x] Completed
+  * Target: `backend/agents/orchestrator.py`, `backend/main.py`, `frontend/src/services/api.js`, `frontend/src/App.jsx`, `frontend/src/components/DeveloperAuditDrawer.jsx`
+  * Implemented `stream_execute()` generator in `MultiAgentStateGraph` yielding typed SSE events: `pipeline_started`, `market_context_loaded`, `analysts_started`, `analysts_completed`, `debate_started`, `debate_turn`, `rebuttal_triggered`, `convergence_reached`, `synthesis_started`, `synthesis_completed`, `complete`.
+  * Exposed `GET /api/analysis/stream/{ticker}` in FastAPI returning `StreamingResponse(media_type="text/event-stream")`.
+  * Implemented client-side SSE stream reader `streamMultiAgentAnalysis()` in `frontend/src/services/api.js` using `ReadableStream` and `TextDecoder` with graceful fallback on backend offline mode.
+  * Connected live streaming status indicator into `frontend/src/App.jsx` showing real-time node transitions and received event counts.
+  * Added "StateGraph & Live Stream" tab to `DeveloperAuditDrawer.jsx` rendering both the StateGraph execution trace steps and the live streaming event feed with timestamps.
+  * Verified via dedicated test suite `backend/tests/test_streaming_telemetry.py` and regression tested with `backend/test_suite.py` (19/19 passing).
+* **Sub-phase 5.2: Evidence Explorer UI** [ ] Pending
   * Target: `frontend/src/components/`
   * Clickable citation badges in the UI that open a modal displaying the exact document excerpt, page number, and source filing date.
-* **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails**
+* **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails** [ ] Pending
   * Target: `frontend/src/`, `backend/`
   * Interactive macro shock simulator (e.g. 2020 Liquidity Shock, 2022 Rate Hike).
   * Prominent educational disclaimers reframing outputs as research simulations rather than SEBI-regulated investment advice.
@@ -216,3 +221,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 29, 2026 | Phase 4.1 | Non-blocking async event loop: `httpx.AsyncClient` pool, parallel `asyncio.gather` agent tasks, and async DB wrappers. | Completed |
 | Oct 30, 2026 | Phase 4.2 | API Security & Clean Packaging: strict CORS, clean package imports, Pydantic regex validation, and injection sanitization. | Completed |
 | Oct 30, 2026 | Phase 4.3 | Multi-Agent State Machine: typed StateGraph, cyclical bull-vs-bear rebuttal loop, circuit breaker, and `/api/orchestrator/topology`. | Completed |
+| Oct 30, 2026 | Phase 5.1 | Server-Sent Events (SSE) Streaming Telemetry: `/api/analysis/stream/{ticker}`, frontend stream listener, live progress UI & audit tab. | Completed |

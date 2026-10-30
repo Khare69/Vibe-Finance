@@ -38,6 +38,109 @@ export async function getStocks() {
   }
 }
 
+export async function streamMultiAgentAnalysis({
+  ticker = 'RELIANCE',
+  userProfile = {
+    risk_level: 'conservative',
+    investment_horizon: 'medium',
+    panic_sell_tendency: 0.8,
+    preferred_sectors: ['Energy', 'Tech'],
+    portfolio_cash: 250000,
+  },
+  explainMode = 'beginner',
+  simulatedStaleData = false,
+  simulatedRagTimeout = false,
+  onEvent = () => {},
+  onError = () => {},
+  onComplete = () => {},
+}) {
+  const queryParams = new URLSearchParams({
+    risk_level: userProfile?.risk_level || 'conservative',
+    simulated_stale_data: simulatedStaleData ? 'true' : 'false',
+    simulated_rag_timeout: simulatedRagTimeout ? 'true' : 'false',
+  });
+
+  const url = `${BASE_URL}/api/analysis/stream/${encodeURIComponent(ticker)}?${queryParams.toString()}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`SSE streaming endpoint error: ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('ReadableStream not supported or empty body');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let completedResult = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split('\n\n');
+      buffer = blocks.pop() || '';
+
+      for (const block of blocks) {
+        if (!block.trim()) continue;
+        let eventType = 'message';
+        let dataPayload = null;
+
+        const lines = block.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            try {
+              dataPayload = JSON.parse(line.slice(5).trim());
+            } catch (e) {
+              dataPayload = line.slice(5).trim();
+            }
+          }
+        }
+
+        if (eventType && dataPayload !== null) {
+          onEvent({ type: eventType, payload: dataPayload, timestamp: new Date().toISOString() });
+          if (eventType === 'complete') {
+            completedResult = dataPayload;
+            completedResult.is_offline_mock = false;
+            onComplete(completedResult);
+          }
+        }
+      }
+    }
+
+    if (completedResult) {
+      return completedResult;
+    }
+
+    // Fallback if stream closed before complete event
+    return await runMultiAgentAnalysis({
+      ticker,
+      userProfile,
+      explainMode,
+      simulatedStaleData,
+      simulatedRagTimeout,
+    });
+  } catch (err) {
+    console.warn('Streaming connection failed or backend offline, falling back to static analysis:', err);
+    onError(err);
+    const fallback = await runMultiAgentAnalysis({
+      ticker,
+      userProfile,
+      explainMode,
+      simulatedStaleData,
+      simulatedRagTimeout,
+    });
+    onComplete(fallback);
+    return fallback;
+  }
+}
+
 export async function runMultiAgentAnalysis({
   ticker = 'RELIANCE',
   userProfile = {
