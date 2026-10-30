@@ -4,10 +4,7 @@ import sqlite3
 import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
-try:
-    from .models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
-except (ImportError, ValueError):
-    from models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+from backend.models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "vibe_finance.db")
 

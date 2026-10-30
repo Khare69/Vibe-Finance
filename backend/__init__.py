@@ -1,1 +1,11 @@
-# Vibe Finance Backend Package
+"""
+Vibe Finance Multi-Agent Backend Package.
+Ensures root package accessibility for standardized imports.
+"""
+import os
+import sys
+
+# Ensure repository root is on sys.path for clean package imports
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)

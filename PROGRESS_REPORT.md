@@ -147,11 +147,14 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
   * Built non-blocking async SQLite database wrappers (`*_async`) using `asyncio.to_thread` across all user profile, portfolio, watchlist, and decision memo endpoints.
   * Offloaded blocking CPU and network I/O (`yfinance` downloads, PyMuPDF parsing, vector scoring) to background worker threads.
   * Verified via dedicated test suite `backend/tests/test_async_orchestration.py` and confirmed all 19 test scenarios in `backend/test_suite.py` pass with 100% accuracy.
-* **Sub-phase 4.2: API Security & Clean Packaging** [ ] Pending
-  * Target: `backend/`
-  * Pass Gemini API keys via `x-goog-api-key` header (remove keys from URL query strings).
-  * Fix CORS policy: restrict origins to frontend hosts (`http://localhost:5173`) when credentials are enabled.
-  * Standardize package imports, eliminating duplicated `try/except ImportError` blocks.
+* **Sub-phase 4.2: API Security & Clean Packaging** [x] Completed
+  * Target: `backend/main.py`, `backend/`
+  * Hardened CORS policy: replaced insecure `allow_origins=["*"]` with credentials with explicit origin configuration (`ALLOWED_ORIGINS` environment variable and regex support for local dev hosts), adhering to modern web security standards.
+  * Standardized Python packaging architecture: unified all internal module imports under clean `backend.*` paths, eliminating duplicated and fragile `try/except (ImportError, ValueError)` blocks across all 10 backend files.
+  * Hardened input validation: added strict Pydantic regex patterns and input boundary validation for tickers, dates, trade actions, and numeric limits.
+  * Implemented ticker sanitization and prompt-injection filtering across incoming documents and decision memos.
+  * Added path-traversal sanitization (`safe_filename`) for uploaded PDF/text files.
+  * Verified via dedicated test suite `backend/tests/test_api_security.py` and regression tested with `backend/test_suite.py` (19/19 passing).
 * **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)** [ ] Pending
   * Target: `backend/agents/`
   * Structure agent orchestration into a typed cyclic directed graph (`StateGraph`) with explicit bull-vs-bear debate cycles and circuit breakers.
@@ -207,3 +210,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 29, 2026 | Phase 3.2 | Added institutional risk metrics: CAGR, Max Drawdown, Sharpe, Sortino, and Benchmark Alpha (Nifty 50 / S&P 500). | Completed |
 | Oct 29, 2026 | Phase 3.3 | Integrated dynamic backtest UI: equity curve chart with Recharts, risk badges, point-in-time barometer, and currency detection. | Completed |
 | Oct 29, 2026 | Phase 4.1 | Non-blocking async event loop: `httpx.AsyncClient` pool, parallel `asyncio.gather` agent tasks, and async DB wrappers. | Completed |
+| Oct 30, 2026 | Phase 4.2 | API Security & Clean Packaging: strict CORS, clean package imports, Pydantic regex validation, and injection sanitization. | Completed |

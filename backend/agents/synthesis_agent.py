@@ -1,9 +1,6 @@
 from typing import Dict, Any
 
-try:
-    from .llm_client import llm_client
-except (ImportError, ValueError):
-    from agents.llm_client import llm_client
+from backend.agents.llm_client import llm_client
 
 
 class SynthesisAgent:

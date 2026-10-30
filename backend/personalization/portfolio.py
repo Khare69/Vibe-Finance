@@ -1,12 +1,7 @@
 from typing import Dict, Any, List
-try:
-    from .profiler import user_profiler
-    from ..database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
-    from ..data.market_service import market_service
-except (ImportError, ValueError):
-    from personalization.profiler import user_profiler
-    from database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
-    from data.market_service import market_service
+from backend.personalization.profiler import user_profiler
+from backend.database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
+from backend.data.market_service import market_service
 
 class PortfolioService:
     """

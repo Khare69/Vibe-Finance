@@ -13,10 +13,7 @@ try:
 except ImportError:
     HAS_PYMUPDF = False
 
-try:
-    from .corpus import RAG_DOCUMENTS, SENTIMENT_TIMELINES
-except (ImportError, ValueError):
-    from corpus import RAG_DOCUMENTS, SENTIMENT_TIMELINES
+from backend.rag.corpus import RAG_DOCUMENTS, SENTIMENT_TIMELINES
 
 
 # Additional initial regulatory filing records (including HDFCBANK)

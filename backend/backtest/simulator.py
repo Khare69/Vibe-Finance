@@ -6,12 +6,8 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-try:
-    from ..data.market_service import market_service
-    from ..rag.vector_store import vector_store
-except (ImportError, ValueError):
-    from data.market_service import market_service
-    from rag.vector_store import vector_store
+from backend.data.market_service import market_service
+from backend.rag.vector_store import vector_store
 
 
 class BacktestSimulator:

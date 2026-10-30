@@ -1,3 +1,5 @@
+import os
+import re
 import time
 import asyncio
 from contextlib import asynccontextmanager
@@ -7,60 +9,41 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-try:
-    from .data.market_service import market_service
-    from .rag.corpus import RAG_DOCUMENTS
-    from .rag.retriever import rag_retriever
-    from .agents.quant_agent import quant_agent
-    from .agents.rag_agent import rag_agent
-    from .agents.behavioral_agent import behavioral_agent
-    from .agents.debate_engine import debate_engine
-    from .agents.synthesis_agent import synthesis_agent
-    from .agents.llm_client import llm_client
-    from .personalization.profiler import user_profiler
-    from .personalization.portfolio import portfolio_service
-    from .backtest.simulator import backtest_simulator
-    from .observability.audit_logger import audit_logger
-    from .database import (
-        get_user_profile_async as db_get_user_profile_async,
-        upsert_user_profile_async as db_upsert_user_profile_async,
-        get_all_holdings_async as db_get_all_holdings_async,
-        upsert_holding_async as db_upsert_holding_async,
-        delete_holding_async as db_delete_holding_async,
-        get_watchlist_async as db_get_watchlist_async,
-        add_to_watchlist_async as db_add_to_watchlist_async,
-        remove_from_watchlist_async as db_remove_from_watchlist_async,
-        save_memo_async as db_save_memo_async,
-        get_memos_async as db_get_memos_async
-    )
-    from .models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
-except (ImportError, ValueError):
-    from data.market_service import market_service
-    from rag.corpus import RAG_DOCUMENTS
-    from rag.retriever import rag_retriever
-    from agents.quant_agent import quant_agent
-    from agents.rag_agent import rag_agent
-    from agents.behavioral_agent import behavioral_agent
-    from agents.debate_engine import debate_engine
-    from agents.synthesis_agent import synthesis_agent
-    from agents.llm_client import llm_client
-    from personalization.profiler import user_profiler
-    from personalization.portfolio import portfolio_service
-    from backtest.simulator import backtest_simulator
-    from observability.audit_logger import audit_logger
-    from database import (
-        get_user_profile_async as db_get_user_profile_async,
-        upsert_user_profile_async as db_upsert_user_profile_async,
-        get_all_holdings_async as db_get_all_holdings_async,
-        upsert_holding_async as db_upsert_holding_async,
-        delete_holding_async as db_delete_holding_async,
-        get_watchlist_async as db_get_watchlist_async,
-        add_to_watchlist_async as db_add_to_watchlist_async,
-        remove_from_watchlist_async as db_remove_from_watchlist_async,
-        save_memo_async as db_save_memo_async,
-        get_memos_async as db_get_memos_async
-    )
-    from models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+from backend.data.market_service import market_service
+from backend.rag.corpus import RAG_DOCUMENTS
+from backend.rag.retriever import rag_retriever
+from backend.rag.vector_store import vector_store
+from backend.agents.quant_agent import quant_agent
+from backend.agents.rag_agent import rag_agent
+from backend.agents.behavioral_agent import behavioral_agent
+from backend.agents.debate_engine import debate_engine
+from backend.agents.synthesis_agent import synthesis_agent
+from backend.agents.llm_client import llm_client
+from backend.personalization.profiler import user_profiler
+from backend.personalization.portfolio import portfolio_service
+from backend.backtest.simulator import backtest_simulator
+from backend.observability.audit_logger import audit_logger
+from backend.database import (
+    get_user_profile_async as db_get_user_profile_async,
+    upsert_user_profile_async as db_upsert_user_profile_async,
+    get_all_holdings_async as db_get_all_holdings_async,
+    upsert_holding_async as db_upsert_holding_async,
+    delete_holding_async as db_delete_holding_async,
+    get_watchlist_async as db_get_watchlist_async,
+    add_to_watchlist_async as db_add_to_watchlist_async,
+    remove_from_watchlist_async as db_remove_from_watchlist_async,
+    save_memo_async as db_save_memo_async,
+    get_memos_async as db_get_memos_async
+)
+from backend.models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+
+
+def sanitize_ticker(ticker: str) -> str:
+    """Validates and cleans ticker symbols to prevent injection attacks."""
+    cleaned = re.sub(r"[^A-Za-z0-9\.\^]", "", ticker.strip().upper())
+    if not cleaned or len(cleaned) > 20:
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol format")
+    return cleaned
 
 
 @asynccontextmanager
@@ -77,48 +60,60 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for local and web development
+# --- Secure CORS Policy ---
+# Restrict allowed origins to frontend domains (eliminating insecure allow_origins=["*"] with credentials)
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+env_origins = os.environ.get("ALLOWED_ORIGINS")
+allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()] if env_origins else DEFAULT_ALLOWED_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# --- Pydantic Request Models ---
+
+# --- Pydantic Request Models with Strict Validation ---
 
 class UserProfileModel(BaseModel):
-    risk_level: Optional[str] = Field(default="conservative")
-    investment_horizon: Optional[str] = Field(default="medium")
+    risk_level: Optional[str] = Field(default="conservative", pattern=r"^(conservative|moderate|aggressive)$")
+    investment_horizon: Optional[str] = Field(default="medium", pattern=r"^(short|medium|long)$")
     panic_sell_tendency: Optional[float] = Field(default=0.8, ge=0.0, le=1.0)
     preferred_sectors: Optional[List[str]] = Field(default_factory=lambda: ["Energy", "Tech"])
     portfolio_cash: Optional[float] = Field(default=250000.0, ge=0.0)
 
 class AnalyzeRequest(BaseModel):
-    ticker: str = Field(default="RELIANCE", min_length=1, max_length=20)
+    ticker: str = Field(default="RELIANCE", min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
     user_profile: Optional[UserProfileModel] = None
     explain_mode: Optional[str] = Field(default="beginner")
     simulated_stale_data: Optional[bool] = False
     simulated_rag_timeout: Optional[bool] = False
 
 class SimulateTradeRequest(BaseModel):
-    ticker: str = Field(default="TSLA", min_length=1, max_length=20)
-    action: str = Field(default="BUY")
+    ticker: str = Field(default="TSLA", min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
+    action: str = Field(default="BUY", pattern=r"^(BUY|SELL)$")
     quantity: int = Field(default=10, gt=0)
     price: float = Field(default=240.0, gt=0.0)
     user_profile: Optional[Dict[str, Any]] = None
 
 class BacktestRequest(BaseModel):
-    ticker: str = Field(default="NVDA", min_length=1, max_length=20)
-    historical_date: str = Field(default="2024-10-15")
+    ticker: str = Field(default="NVDA", min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
+    historical_date: str = Field(default="2024-10-15", pattern=r"^\d{4}-\d{2}-\d{2}$")
     holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
 class UploadDocumentRequest(BaseModel):
-    ticker: str = Field(min_length=1, max_length=20)
-    document_title: str = Field(default="Corporate Filing")
-    section: str = Field(default="Management Discussion")
-    content: str = Field(min_length=10)
+    ticker: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
+    document_title: str = Field(default="Corporate Filing", max_length=200)
+    section: str = Field(default="Management Discussion", max_length=200)
+    content: str = Field(min_length=10, max_length=500000)
     source_type: Optional[str] = "USER_UPLOAD"
 
 
@@ -143,12 +138,14 @@ async def list_stocks():
 
 @app.get("/api/stocks/{ticker}/history")
 async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):
-    return await asyncio.to_thread(market_service.get_history, ticker=ticker, timeframe=timeframe or "1M")
+    safe_ticker = sanitize_ticker(ticker)
+    safe_tf = timeframe if timeframe in ["1M", "3M", "1Y"] else "1M"
+    return await asyncio.to_thread(market_service.get_history, ticker=safe_ticker, timeframe=safe_tf)
 
 @app.post("/api/analyze")
 async def analyze_stock(req: AnalyzeRequest):
     overall_start = time.perf_counter()
-    ticker = req.ticker.upper()
+    ticker = sanitize_ticker(req.ticker)
     sim_stale = bool(req.simulated_stale_data)
     sim_timeout = bool(req.simulated_rag_timeout)
     
@@ -258,7 +255,9 @@ async def analyze_stock(req: AnalyzeRequest):
 
 @app.post("/api/simulate-trade")
 async def simulate_trade(req: SimulateTradeRequest):
-    return await asyncio.to_thread(portfolio_service.simulate_trade, req.model_dump())
+    safe_data = req.model_dump()
+    safe_data["ticker"] = sanitize_ticker(safe_data["ticker"])
+    return await asyncio.to_thread(portfolio_service.simulate_trade, safe_data)
 
 @app.get("/api/portfolio")
 async def get_portfolio():
@@ -266,9 +265,10 @@ async def get_portfolio():
 
 @app.post("/api/backtest")
 async def run_backtest(req: BacktestRequest):
+    safe_ticker = sanitize_ticker(req.ticker)
     return await asyncio.to_thread(
         backtest_simulator.simulate,
-        ticker=req.ticker,
+        ticker=safe_ticker,
         historical_date=req.historical_date,
         holding_days=req.holding_days or 90
     )
@@ -296,15 +296,17 @@ async def get_stored_holdings():
 
 @app.post("/api/portfolio/holdings")
 async def upsert_stored_holding(holding: PortfolioHoldingDB):
+    holding.ticker = sanitize_ticker(holding.ticker)
     saved = await db_upsert_holding_async(holding)
     return saved.model_dump()
 
 @app.delete("/api/portfolio/holdings/{ticker}")
 async def delete_stored_holding(ticker: str):
-    success = await db_delete_holding_async(ticker)
+    safe_ticker = sanitize_ticker(ticker)
+    success = await db_delete_holding_async(safe_ticker)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Holding {ticker} not found")
-    return {"status": "deleted", "ticker": ticker.upper()}
+        raise HTTPException(status_code=404, detail=f"Holding {safe_ticker} not found")
+    return {"status": "deleted", "ticker": safe_ticker}
 
 @app.get("/api/watchlist")
 async def get_user_watchlist():
@@ -313,18 +315,22 @@ async def get_user_watchlist():
 
 @app.post("/api/watchlist")
 async def add_item_to_watchlist(item: WatchlistDB):
+    item.ticker = sanitize_ticker(item.ticker)
     saved = await db_add_to_watchlist_async(item)
     return saved.model_dump()
 
 @app.delete("/api/watchlist/{ticker}")
 async def remove_item_from_watchlist(ticker: str):
-    success = await db_remove_from_watchlist_async(ticker)
+    safe_ticker = sanitize_ticker(ticker)
+    success = await db_remove_from_watchlist_async(safe_ticker)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Watchlist item {ticker} not found")
-    return {"status": "deleted", "ticker": ticker.upper()}
+        raise HTTPException(status_code=404, detail=f"Watchlist item {safe_ticker} not found")
+    return {"status": "deleted", "ticker": safe_ticker}
 
 @app.post("/api/memos")
 async def save_decision_memo(memo: DecisionMemoDB):
+    memo.ticker = sanitize_ticker(memo.ticker)
+    memo.memo_markdown = vector_store.sanitize_text(memo.memo_markdown)
     saved = await db_save_memo_async(memo)
     return saved.model_dump()
 
@@ -335,17 +341,22 @@ async def list_decision_memos():
 
 @app.post("/api/rag/upload")
 async def upload_rag_document(req: UploadDocumentRequest):
+    safe_ticker = sanitize_ticker(req.ticker)
+    clean_content = vector_store.sanitize_text(req.content)
+    clean_title = vector_store.sanitize_text(req.document_title)
+    clean_section = vector_store.sanitize_text(req.section)
+
     chunks = await asyncio.to_thread(
         rag_retriever.ingest_document,
-        ticker=req.ticker,
-        document_title=req.document_title,
-        section=req.section,
-        content=req.content,
+        ticker=safe_ticker,
+        document_title=clean_title,
+        section=clean_section,
+        content=clean_content,
         source_type=req.source_type or "USER_UPLOAD"
     )
     return {
         "status": "indexed",
-        "ticker": req.ticker.upper(),
+        "ticker": safe_ticker,
         "chunks_created": len(chunks),
         "total_corpus_documents": len(rag_retriever.documents)
     }
@@ -356,9 +367,12 @@ async def upload_rag_file(
     ticker: str = Form(...),
     document_title: Optional[str] = Form("Uploaded Corporate Document")
 ):
-    """Handles PDF and text file uploads, extracting text via PyMuPDF and indexing into VectorStore."""
-    filename = file.filename or "uploaded_file"
-    ext = filename.split(".")[-1].lower() if "." in filename else ""
+    """Handles PDF and text file uploads with strict filename and size sanitization."""
+    safe_ticker = sanitize_ticker(ticker)
+    raw_filename = file.filename or "uploaded_file"
+    safe_filename = os.path.basename(raw_filename).replace("..", "").strip()
+
+    ext = safe_filename.split(".")[-1].lower() if "." in safe_filename else ""
     if ext not in ["pdf", "txt", "md"]:
         raise HTTPException(status_code=400, detail="Only .pdf, .txt, and .md files are supported for vector ingestion")
 
@@ -366,28 +380,31 @@ async def upload_rag_file(
     if len(content_bytes) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size exceeds maximum 10MB limit")
 
+    clean_title = vector_store.sanitize_text(document_title or safe_filename)
+
     if ext == "pdf":
         chunks = await asyncio.to_thread(
             rag_retriever.ingest_pdf,
             pdf_bytes=content_bytes,
-            ticker=ticker,
-            document_title=document_title or filename
+            ticker=safe_ticker,
+            document_title=clean_title
         )
     else:
         text = content_bytes.decode("utf-8", errors="ignore")
+        clean_text = vector_store.sanitize_text(text)
         chunks = await asyncio.to_thread(
             rag_retriever.ingest_document,
-            ticker=ticker,
-            document_title=document_title or filename,
+            ticker=safe_ticker,
+            document_title=clean_title,
             section="Uploaded File",
-            content=text,
+            content=clean_text,
             source_type="FILE_UPLOAD"
         )
 
     return {
         "status": "indexed",
-        "ticker": ticker.upper(),
-        "filename": filename,
+        "ticker": safe_ticker,
+        "filename": safe_filename,
         "chunks_created": len(chunks),
         "total_corpus_documents": len(rag_retriever.documents)
     }

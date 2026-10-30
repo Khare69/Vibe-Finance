@@ -1,8 +1,5 @@
 from typing import Dict, Any, List
-try:
-    from ..database import get_user_profile
-except (ImportError, ValueError):
-    from database import get_user_profile
+from backend.database import get_user_profile
 
 class UserProfiler:
     """

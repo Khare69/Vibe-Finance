@@ -3,12 +3,8 @@ import re
 import asyncio
 from typing import Dict, Any, List, Optional
 
-try:
-    from ..rag.retriever import rag_retriever
-    from .llm_client import llm_client
-except (ImportError, ValueError):
-    from rag.retriever import rag_retriever
-    from agents.llm_client import llm_client
+from backend.rag.retriever import rag_retriever
+from backend.agents.llm_client import llm_client
 
 
 class RAGAgent:

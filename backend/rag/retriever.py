@@ -1,10 +1,7 @@
 import time
 from typing import List, Dict, Any, Optional
 
-try:
-    from .vector_store import vector_store
-except (ImportError, ValueError):
-    from rag.vector_store import vector_store
+from backend.rag.vector_store import vector_store
 
 
 class RAGRetriever:
