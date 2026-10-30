@@ -112,6 +112,10 @@ class BacktestRequest(BaseModel):
     historical_date: str = Field(default="2024-10-15", pattern=r"^\d{4}-\d{2}-\d{2}$")
     holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
+class StressTestRequest(BaseModel):
+    scenario_id: Optional[str] = Field(default="rate_hike_2022", max_length=50)
+    custom_shocks: Optional[Dict[str, float]] = None
+
 class UploadDocumentRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
     document_title: str = Field(default="Corporate Filing", max_length=200)
@@ -234,7 +238,11 @@ async def analyze_stock(req: AnalyzeRequest):
         "synthesis": final_state.synthesis_result,
         "sentiment_shift": final_state.sentiment_shift,
         "telemetry": final_state.telemetry,
-        "execution_trace": final_state.execution_trace
+        "execution_trace": final_state.execution_trace,
+        "regulatory_compliance_guardrail": {
+            "framework": "SEBI (Research Analysts) Regulations, 2014 & SEBI (Investment Advisers) Regulations, 2013",
+            "notice": "Educational quantitative research simulation only. Not registered investment advice."
+        }
     }
 
 @app.post("/api/simulate-trade")
@@ -246,6 +254,18 @@ async def simulate_trade(req: SimulateTradeRequest):
 @app.get("/api/portfolio")
 async def get_portfolio():
     return await asyncio.to_thread(portfolio_service.get_portfolio)
+
+@app.get("/api/portfolio/stress-scenarios")
+async def get_stress_scenarios():
+    return await asyncio.to_thread(portfolio_service.get_stress_scenarios)
+
+@app.post("/api/portfolio/stress-test")
+async def run_portfolio_stress_test(req: StressTestRequest):
+    return await asyncio.to_thread(
+        portfolio_service.simulate_stress_test,
+        scenario_id=req.scenario_id or "rate_hike_2022",
+        custom_shocks=req.custom_shocks
+    )
 
 @app.post("/api/backtest")
 async def run_backtest(req: BacktestRequest):

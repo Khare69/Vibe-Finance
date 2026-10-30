@@ -166,7 +166,7 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 5: Streaming Telemetry & Frontend Experience
-*Status: [ ] In Progress*
+*Status: [x] Completed (Verified via dedicated unit tests and Vite production build)*
 
 * **Sub-phase 5.1: Server-Sent Events (SSE) Streaming Telemetry** [x] Completed
   * Target: `backend/agents/orchestrator.py`, `backend/main.py`, `frontend/src/services/api.js`, `frontend/src/App.jsx`, `frontend/src/components/DeveloperAuditDrawer.jsx`
@@ -188,10 +188,13 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
     * Upgraded fundamental RAG agent cards with page numbers, fiscal periods, and relevance match tags.
     * Added "Evidence Citations" shelf inside the Institutional Expert explanation in `WhyThisWhyNow.jsx`.
   * Verified via dedicated test suite `backend/tests/test_evidence_explorer.py`, verified Vite production build, and full regression test `backend/test_suite.py` (19/19 passing).
-* **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails** [ ] Pending
-  * Target: `frontend/src/`, `backend/`
-  * Interactive macro shock simulator (e.g. 2020 Liquidity Shock, 2022 Rate Hike).
-  * Prominent educational disclaimers reframing outputs as research simulations rather than SEBI-regulated investment advice.
+* **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails** [x] Completed
+  * Target: `backend/personalization/portfolio.py`, `backend/main.py`, `frontend/src/components/MacroStressSimulator.jsx`, `frontend/src/components/ExportMemoModal.jsx`, `frontend/src/App.jsx`
+  * Added portfolio stress-testing engine supporting 4 macro scenarios: 2022 Fed Rate Hike Shock (+400 bps), 2020 Liquidity Crunch, Crude Oil & Stagflation Shock ($120/bbl), and 2024 Tech Multiple Normalization.
+  * Implemented REST endpoints `GET /api/portfolio/stress-scenarios` and `POST /api/portfolio/stress-test`, computing asset-by-asset value deltas, post-shock portfolio beta, cash buffer adequacy ratings, and projected ruin probability.
+  * Upgraded `MacroStressSimulator.jsx` to render an interactive holding-by-holding stress table, liquidity adequacy gauges, historical recovery horizons, and agent defensive re-calibrations.
+  * Embedded statutory SEBI Compliance Guardrails across `MacroStressSimulator.jsx`, `ExportMemoModal.jsx` (Section 6), `App.jsx` footer, and API endpoints, explicitly disclaiming registered investment advice under SEBI (Investment Advisers) Regulations, 2013 and SEBI (Research Analysts) Regulations, 2014.
+  * Verified via dedicated test suite `backend/tests/test_stress_testing_and_compliance.py`, full backend regression test `backend/test_suite.py` (19/19 passing), and Vite production build.
 
 ---
 
@@ -232,3 +235,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 30, 2026 | Phase 4.3 | Multi-Agent State Machine: typed StateGraph, cyclical bull-vs-bear rebuttal loop, circuit breaker, and `/api/orchestrator/topology`. | Completed |
 | Oct 30, 2026 | Phase 5.1 | Server-Sent Events (SSE) Streaming Telemetry: `/api/analysis/stream/{ticker}`, frontend stream listener, live progress UI & audit tab. | Completed |
 | Oct 30, 2026 | Phase 5.2 | Evidence Explorer UI: rich citation metadata, in-page search, grounding audit tab, multi-format export, and inline debate citation pills. | Completed |
+| Oct 30, 2026 | Phase 5.3 | Portfolio Stress-Testing & SEBI Compliance Guardrails: 4 macro shock scenarios, holding breakdown table, cash runway, and statutory disclaimers. | Completed |

@@ -281,7 +281,186 @@ class PortfolioService:
                 "current_beta": current_beta,
                 "projected_beta": projected_beta
             },
-            "suggested_alternative": suggested_alternative
+            "suggested_alternative": suggested_alternative,
+            "regulatory_compliance_guardrail": {
+                "framework": "SEBI (Investment Advisers) Regulations, 2013",
+                "notice": "Simulated trade impact only. Not investment advice or trade execution."
+            }
+        }
+
+    def get_stress_scenarios(self) -> List[Dict[str, Any]]:
+        """Returns institutional macro stress-testing scenarios."""
+        return [
+            {
+                "id": "rate_hike_2022",
+                "name": "2022 Fed Rate Hike Shock (+400 bps)",
+                "description": "Rapid monetary quantitative tightening, growth equity multiple compression, and debt servicing headwinds.",
+                "market_drawdown_pct": -18.5,
+                "recovery_horizon_months": "14-18 Months",
+                "sector_shocks": {
+                    "Tech": -24.5,
+                    "Energy": 14.2,
+                    "Financials": -4.8,
+                    "Consumer": -12.0,
+                    "Automotive": -16.5,
+                    "Cash": 0.0
+                },
+                "agent_guidance": {
+                    "quant": "BEARISH: Momentum breakdown below 200-SMA; exit high-beta growth assets.",
+                    "rag": "NEUTRAL: Rising DCF discount rates offset steady operational top-line execution.",
+                    "risk": "MAX DEFENSIVE: Restrict high-beta assets to <3% allocation; raise cash buffer."
+                }
+            },
+            {
+                "id": "covid_liquidity_2020",
+                "name": "2020 Liquidity Crunch (Global Lockdowns)",
+                "description": "Severe market-wide liquidity seizure, tail-risk drawdown, and supply-chain interruption.",
+                "market_drawdown_pct": -34.0,
+                "recovery_horizon_months": "6-9 Months",
+                "sector_shocks": {
+                    "Tech": -18.2,
+                    "Energy": -32.5,
+                    "Financials": -21.0,
+                    "Consumer": -26.0,
+                    "Automotive": -28.0,
+                    "Cash": 0.0
+                },
+                "agent_guidance": {
+                    "quant": "DEEPLY OVERSOLD: RSI < 25 across blue-chips; watch for capitulation volume anomaly.",
+                    "rag": "BEARISH: Severe operating cash flow compression and short-term debt servicing risk.",
+                    "risk": "EMERGENCY DRAWDOWN HALT: Enforce emergency stop-loss boundaries."
+                }
+            },
+            {
+                "id": "crude_supply_shock",
+                "name": "Crude Oil & Geopolitical Shock ($120/bbl)",
+                "description": "Supply-side commodity stagflation driving elevated input costs and margin contraction in import-heavy nations.",
+                "market_drawdown_pct": -9.5,
+                "recovery_horizon_months": "8-12 Months",
+                "sector_shocks": {
+                    "Tech": -8.5,
+                    "Energy": 34.0,
+                    "Financials": 2.5,
+                    "Consumer": -14.0,
+                    "Automotive": -15.5,
+                    "Cash": 0.0
+                },
+                "agent_guidance": {
+                    "quant": "SECTOR ROTATION: Strong institutional capital inflows into refining and upstream energy.",
+                    "rag": "MIXED: Upstream refining margin gains tempered by downstream raw material cost inflation.",
+                    "risk": "BALANCED: Hedge tech exposure with low-beta energy and dividend-yielding assets."
+                }
+            },
+            {
+                "id": "tech_multiple_pullback_2024",
+                "name": "2024 Semiconductor & AI Multiple Normalization",
+                "description": "Hyperscaler capex digestion pause and valuation de-rating in high-beta semiconductor equities.",
+                "market_drawdown_pct": -12.0,
+                "recovery_horizon_months": "4-6 Months",
+                "sector_shocks": {
+                    "Tech": -28.0,
+                    "Energy": 4.0,
+                    "Financials": 6.5,
+                    "Consumer": 1.5,
+                    "Automotive": -9.0,
+                    "Cash": 0.0
+                },
+                "agent_guidance": {
+                    "quant": "MOMENTUM ROTATION: Capital rotating from semiconductor momentum to domestic banking & value.",
+                    "rag": "CAUTIOUS: Demand growth remains solid but enterprise order lead times normalize.",
+                    "risk": "CAP EXPOSURE: Rebalance semiconductor exposure below 25% portfolio ceiling."
+                }
+            }
+        ]
+
+    def simulate_stress_test(
+        self,
+        scenario_id: str = "rate_hike_2022",
+        custom_shocks: Dict[str, float] = None
+    ) -> Dict[str, Any]:
+        """
+        Simulates the impact of severe macroeconomic and market shocks on the portfolio.
+        Calculates asset-by-asset value deltas, portfolio drawdown, recovery horizon,
+        and cash buffer adequacy with mandatory SEBI compliance disclosures.
+        """
+        scenarios = self.get_stress_scenarios()
+        scenario = next((s for s in scenarios if s["id"] == scenario_id), scenarios[0])
+
+        sector_shocks = dict(scenario["sector_shocks"])
+        if custom_shocks:
+            sector_shocks.update(custom_shocks)
+
+        port = self.get_portfolio()
+        holdings = port.get("holdings", [])
+        cash = port.get("cash", 100000.0)
+        baseline_total_val = port.get("total_value", 500000.0)
+
+        asset_impacts = []
+        shocked_invested_val = 0.0
+        shocked_weighted_beta = 0.0
+
+        for h in holdings:
+            sec = h.get("sector", "Tech")
+            shock_pct = sector_shocks.get(sec, -10.0)
+            orig_val = h.get("market_value", 0.0)
+            pnl_delta = orig_val * (shock_pct / 100.0)
+            shocked_val = max(0.0, orig_val + pnl_delta)
+            shocked_invested_val += shocked_val
+            shocked_weighted_beta += h.get("beta", 1.0) * shocked_val
+
+            asset_impacts.append({
+                "ticker": h["ticker"],
+                "company_name": h.get("company_name", h["ticker"]),
+                "sector": sec,
+                "original_value": round(orig_val, 2),
+                "shock_pct": round(shock_pct, 1),
+                "pnl_delta": round(pnl_delta, 2),
+                "shocked_value": round(shocked_val, 2),
+                "beta": h.get("beta", 1.0)
+            })
+
+        shocked_total_val = shocked_invested_val + cash
+        portfolio_pnl_delta = round(shocked_total_val - baseline_total_val, 2)
+        portfolio_drawdown_pct = round(((shocked_total_val - baseline_total_val) / baseline_total_val) * 100, 2) if baseline_total_val > 0 else 0.0
+        shocked_portfolio_beta = round(shocked_weighted_beta / shocked_invested_val, 2) if shocked_invested_val > 0 else 1.0
+
+        # Cash buffer adequacy assessment
+        cash_pct = round((cash / shocked_total_val) * 100, 1) if shocked_total_val > 0 else 0.0
+        if cash_pct >= 25.0:
+            adequacy = "STRONG_LIQUIDITY_BUFFER"
+            ruin_prob = 1.8
+        elif cash_pct >= 15.0:
+            adequacy = "ADEQUATE_BUFFER"
+            ruin_prob = 5.2
+        else:
+            adequacy = "VULNERABLE_DEFICIT"
+            ruin_prob = 18.5
+
+        return {
+            "scenario": scenario,
+            "baseline_total_value": baseline_total_val,
+            "shocked_total_value": round(shocked_total_val, 2),
+            "portfolio_pnl_delta": portfolio_pnl_delta,
+            "portfolio_drawdown_pct": portfolio_drawdown_pct,
+            "shocked_portfolio_beta": shocked_portfolio_beta,
+            "cash_buffer": {
+                "cash_amount": cash,
+                "cash_pct_after_shock": cash_pct,
+                "adequacy_rating": adequacy,
+                "projected_ruin_probability_pct": ruin_prob
+            },
+            "asset_impacts": asset_impacts,
+            "agent_guidance": scenario.get("agent_guidance", {}),
+            "regulatory_compliance_guardrail": {
+                "framework": "SEBI (Research Analysts) Regulations, 2014 & SEBI (Investment Advisers) Regulations, 2013",
+                "disclaimer_type": "STATUTORY_QUANTITATIVE_SIMULATION",
+                "disclaimer_text": (
+                    "REGULATORY COMPLIANCE GUARDRAIL: VibeFinance is an educational algorithmic modeling platform. "
+                    "Stress-test scenarios, drawdown projections, and multi-agent debate outputs are hypothetical simulations "
+                    "and do not constitute SEBI-registered investment advice or portfolio management services. "
+                    "Users must consult a SEBI-registered Investment Adviser (RIA) before committing capital."
+                )
+            }
         }
 
 portfolio_service = PortfolioService()

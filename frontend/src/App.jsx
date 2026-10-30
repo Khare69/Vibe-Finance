@@ -295,20 +295,25 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 bg-[#080c14] py-6 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span>
-            Vibe Finance · Multi-Agent Explainable AI Architecture · Built for resilient financial reasoning
-          </span>
-          <div className="flex items-center gap-4">
+      {/* Footer & SEBI Compliance Guardrail */}
+      <footer className="border-t border-slate-800/80 bg-[#080c14] py-6 px-4 text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+          <div className="space-y-1">
+            <span className="block font-medium text-slate-400">
+              VibeFinance · Explainable Multi-Agent Financial Research & Stress-Testing Architecture
+            </span>
+            <span className="block text-[10px] text-slate-500 max-w-3xl leading-relaxed">
+              SEBI Statutory Disclaimer: Algorithmic modeling and quantitative research prototype only. Does not constitute registered investment advice or portfolio recommendations under SEBI (Investment Advisers) Regulations, 2013 or SEBI (Research Analysts) Regulations, 2014. Consult a SEBI-registered Investment Adviser (RIA) before committing capital.
+            </span>
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
             <button
               onClick={() => setIsDevDrawerOpen(true)}
               className="text-indigo-400 hover:text-indigo-300 font-mono text-xs"
             >
               Session Telemetry
             </button>
-            <span>v1.0.0 Production</span>
+            <span className="font-mono text-[10px] text-slate-500">v1.0.0 Grounded</span>
           </div>
         </div>
       </footer>

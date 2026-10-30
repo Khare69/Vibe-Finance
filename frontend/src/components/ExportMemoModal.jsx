@@ -87,7 +87,16 @@ ${sentiment_shift?.keyword_frequencies?.map((k) => `  - "${k.word}": ${k.previou
 * **Documents Scanned:** ${telemetry?.documents_scanned}
 * **Degraded Fallback Active:** ${telemetry?.degraded_data ? `YES (${telemetry?.degraded_reason})` : 'NO'}
 
-*Generated autonomously by Vibe Finance Multi-Agent System.*
+---
+
+## 6. STATUTORY REGULATORY COMPLIANCE & RISK DISCLAIMERS
+* **Regulatory Standards:** SEBI (Research Analysts) Regulations, 2014 & SEBI (Investment Advisers) Regulations, 2013
+* **Simulation Notice:** This memorandum is generated autonomously by an educational multi-agent quantitative and RAG retrieval system for computational research and stress-testing purposes only.
+* **No Investment Advice:** Nothing contained in this report constitutes personalized financial advice, portfolio management, or a solicitation to purchase or liquidate securities.
+* **Capital Risk Notice:** Equity and derivatives investments involve substantial risk of capital loss. Historical backtesting is hypothetical and does not assure future performance.
+* **Advisory Requirement:** Consult a SEBI-registered Investment Adviser (RIA) or licensed financial advisor prior to executing real-world capital transactions.
+
+*Generated autonomously by VibeFinance Multi-Agent Algorithmic Intelligence.*
 `;
 
   const handleCopy = () => {

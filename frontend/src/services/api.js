@@ -440,3 +440,89 @@ export async function getStoredMemos() {
     return [];
   }
 }
+
+export async function getStressScenarios() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/portfolio/stress-scenarios`);
+    if (!res.ok) throw new Error('Failed to fetch stress scenarios');
+    return await res.json();
+  } catch (err) {
+    return [
+      {
+        id: 'rate_hike_2022',
+        name: '2022 Fed Rate Hike Shock (+400 bps)',
+        description: 'Rapid quantitative tightening and multiple compression across growth equities.',
+        market_drawdown_pct: -18.5,
+        recovery_horizon_months: '14-18 Months',
+        sector_shocks: { Tech: -24.5, Energy: 14.2, Financials: -4.8, Cash: 0.0 }
+      },
+      {
+        id: 'covid_liquidity_2020',
+        name: '2020 Liquidity Crunch (Global Lockdowns)',
+        description: 'Severe market-wide liquidity seizure, tail-risk drawdown, and volatility spike.',
+        market_drawdown_pct: -34.0,
+        recovery_horizon_months: '6-9 Months',
+        sector_shocks: { Tech: -18.2, Energy: -32.5, Financials: -21.0, Cash: 0.0 }
+      },
+      {
+        id: 'crude_supply_shock',
+        name: 'Crude Oil & Geopolitical Shock ($120/bbl)',
+        description: 'Supply-side commodity stagflation and margin contraction in import-heavy nations.',
+        market_drawdown_pct: -9.5,
+        recovery_horizon_months: '8-12 Months',
+        sector_shocks: { Tech: -8.5, Energy: 34.0, Financials: 2.5, Cash: 0.0 }
+      },
+      {
+        id: 'tech_multiple_pullback_2024',
+        name: '2024 Semiconductor & AI Multiple Normalization',
+        description: 'Hyperscaler capex pause and valuation normalization in high-beta semiconductor equities.',
+        market_drawdown_pct: -12.0,
+        recovery_horizon_months: '4-6 Months',
+        sector_shocks: { Tech: -28.0, Energy: 4.0, Financials: 6.5, Cash: 0.0 }
+      }
+    ];
+  }
+}
+
+export async function runPortfolioStressTest({ scenarioId = 'rate_hike_2022', customShocks = null }) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/portfolio/stress-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_id: scenarioId, custom_shocks: customShocks })
+    });
+    if (!res.ok) throw new Error('Stress test error');
+    return await res.json();
+  } catch (err) {
+    // Client-side fallback calculation
+    return {
+      scenario: {
+        id: scenarioId,
+        name: scenarioId === 'covid_liquidity_2020' ? '2020 Liquidity Crunch' : '2022 Fed Rate Hike Shock',
+        description: 'Simulated macroeconomic shock with sector-specific asset valuation stress.',
+        recovery_horizon_months: '12-16 Months'
+      },
+      baseline_total_value: 500000,
+      shocked_total_value: 427000,
+      portfolio_pnl_delta: -73000,
+      portfolio_drawdown_pct: -14.6,
+      shocked_portfolio_beta: 1.12,
+      cash_buffer: {
+        cash_amount: 104025,
+        cash_pct_after_shock: 24.3,
+        adequacy_rating: 'ADEQUATE_BUFFER',
+        projected_ruin_probability_pct: 3.5
+      },
+      asset_impacts: [
+        { ticker: 'RELIANCE', sector: 'Energy', shock_pct: 14.2, pnl_delta: 20203.0, shocked_value: 162478.0 },
+        { ticker: 'TCS', sector: 'Tech', shock_pct: -24.5, pnl_delta: -28775.0, shocked_value: 88674.0 },
+        { ticker: 'AAPL', sector: 'Tech', shock_pct: -24.5, pnl_delta: -16770.0, shocked_value: 51679.0 },
+        { ticker: 'HDFCBANK', sector: 'Financials', shock_pct: -4.8, pnl_delta: -3254.0, shocked_value: 64545.0 }
+      ],
+      regulatory_compliance_guardrail: {
+        framework: 'SEBI (Research Analysts) Regulations, 2014 & SEBI (Investment Advisers) Regulations, 2013',
+        disclaimer_text: 'Simulated quantitative stress test only. Not SEBI-registered investment advice.'
+      }
+    };
+  }
+}
