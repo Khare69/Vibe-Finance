@@ -15,6 +15,7 @@ from backend.data.market_service import market_service
 from backend.rag.corpus import RAG_DOCUMENTS
 from backend.rag.retriever import rag_retriever
 from backend.rag.vector_store import vector_store
+from backend.rag.evaluator import rag_evaluator
 from backend.agents.quant_agent import quant_agent
 from backend.agents.rag_agent import rag_agent
 from backend.agents.behavioral_agent import behavioral_agent
@@ -412,3 +413,8 @@ async def upload_rag_file(
         "chunks_created": len(chunks),
         "total_corpus_documents": len(rag_retriever.documents)
     }
+
+@app.get("/api/rag/evaluate")
+async def evaluate_rag_faithfulness():
+    """Runs automated RAG evaluation benchmark checking faithfulness, citation relevance, and negative control abstention."""
+    return await asyncio.to_thread(rag_evaluator.run_benchmark_suite)

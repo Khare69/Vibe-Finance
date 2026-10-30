@@ -316,8 +316,17 @@ def run_all_tests():
     test_portfolio_conservation_laws()
     print("20. Mathematical Properties & Invariants Passed: RSI bounds, MACD identities, volume anomaly, CAGR, Max Drawdown, and portfolio conservation laws verified.")
 
+    # 21. Test RAG Faithfulness & Citation Evaluation Benchmark
+    from backend.rag.evaluator import rag_evaluator
+    rag_bench = rag_evaluator.run_benchmark_suite()
+    assert rag_bench["benchmark_status"] == "PASSED"
+    assert rag_bench["average_faithfulness"] >= 0.90
+    assert rag_bench["hallucination_rate"] <= 0.05
+    assert rag_bench["all_abstentions_passed"] is True
+    print(f"21. RAG Faithfulness & Citation Evaluation Passed: Faithfulness={rag_bench['average_faithfulness']}, Hallucination={rag_bench['hallucination_rate']}, Negative Refusal={rag_bench['all_abstentions_passed']}.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 20 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 21 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

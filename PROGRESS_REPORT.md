@@ -210,9 +210,15 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
     * **Backtesting Mathematical Formulas:** Validated compound annual growth rate (CAGR), maximum drawdown non-positive invariant, and benchmark alpha identity ($R_p - R_b$).
     * **Portfolio Conservation Laws:** Validated Total Portfolio Value = Invested Value + Cash, sum of allocations = 100.0%, and stress test value conservation ($\Delta V = \sum \Delta v_i$).
   * Overhauled `backend/test_suite.py` to seamlessly execute all 20 end-to-end integration and mathematical invariance test scenarios with 100% accuracy.
-* **Sub-phase 6.2: RAG Faithfulness & Citation Evaluation** [ ] Pending
-  * Target: `backend/tests/`
-  * Automated LLM-as-a-judge / Ragas evaluation suite checking hallucination rates, citation validity, and abstention behavior.
+* **Sub-phase 6.2: RAG Faithfulness & Citation Evaluation** [x] Completed
+  * Target: `backend/rag/evaluator.py`, `backend/tests/test_rag_evaluation.py`, `backend/main.py`, `backend/test_suite.py`
+  * Implemented automated institutional `RAGEvaluator` benchmarking:
+    * **Numerical Entity Preservation:** Extracts percentages, currency figures, and basis points from agent claims and validates exact ground truth presence in source filings ($100\%$ precision on grounded claims).
+    * **Contextual Grounding & Token Overlap:** Evaluates semantic token intersection and citation quote fidelity against retrieved context chunks.
+    * **Hallucination Detection:** Detects fabricated figures and ungrounded statements, enforcing an institutional hallucination tolerance threshold ($\le 0.05$).
+    * **Negative Control Abstention:** Validated $100\%$ abstention and ungrounded claim rejection when queried on unsupported or out-of-domain tickers.
+  * Added REST endpoint `GET /api/rag/evaluate` returning full evaluation metrics across multiple test benchmarks.
+  * Integrated as Scenario 21 in `backend/test_suite.py` — verified all 21 test scenarios pass with 100% accuracy.
 * **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow** [ ] Pending
   * Target: `.github/workflows/ci.yml`, `Dockerfile`, `docker-compose.yml`
   * Automate linting, testing, and containerized deployment verification.
@@ -243,3 +249,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 30, 2026 | Phase 5.2 | Evidence Explorer UI: rich citation metadata, in-page search, grounding audit tab, multi-format export, and inline debate citation pills. | Completed |
 | Oct 30, 2026 | Phase 5.3 | Portfolio Stress-Testing & SEBI Compliance Guardrails: 4 macro shock scenarios, holding breakdown table, cash runway, and statutory disclaimers. | Completed |
 | Oct 30, 2026 | Phase 6.1 | Comprehensive Test Suite Overhaul: mathematical invariance tests for RSI, MACD, Volume Anomaly, CAGR, drawdown, portfolio conservation laws, and expanded test runner (20/20 passing). | Completed |
+| Oct 30, 2026 | Phase 6.2 | RAG Faithfulness & Citation Evaluation: RAGEvaluator harness, numerical entity preservation, negative control abstention, /api/rag/evaluate, and test scenario 21 (21/21 passing). | Completed |
