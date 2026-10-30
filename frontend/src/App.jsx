@@ -248,6 +248,8 @@ export default function App() {
                 synthesis={analysis.synthesis}
                 explainMode={explainMode}
                 onToggleExplainMode={(mode) => setExplainMode(mode)}
+                citations={analysis?.agents?.rag?.citations || []}
+                onOpenCitation={(cite) => setSelectedCitation(cite)}
               />
 
               {/* 2-Column Grid: Sentiment Shift Timeline & Portfolio Risk Heatmap */}

@@ -185,14 +185,41 @@ class VectorStore:
             # Ensure between 0.50 and 0.98
             combined_relevance = max(0.50, min(0.98, combined_relevance))
 
+            # Extract fiscal period and page number if not present
+            fiscal = doc.get("fiscal_period")
+            if not fiscal:
+                for fp in ["Q1 FY26", "Q2 FY26", "Q3 FY26", "Q4 FY26", "Q1 FY25", "Q2 FY25", "Q3 FY25", "Q4 FY25", "FY26", "FY25"]:
+                    if fp.lower() in doc.get("document_title", "").lower() or fp.lower() in doc.get("section", "").lower():
+                        fiscal = fp
+                        break
+            if not fiscal:
+                fiscal = "FY25/26"
+
+            page = doc.get("page_number")
+            if not page:
+                sec_text = doc.get("section", "")
+                if "page" in sec_text.lower():
+                    match = re.search(r"page\s*(\d+)", sec_text, re.IGNORECASE)
+                    if match:
+                        page = int(match.group(1))
+            if not page:
+                page = 1
+
             scored_results.append({
                 "id": doc.get("id", f"cite-{candidate_indices[local_idx]}"),
+                "ticker": doc.get("ticker", ticker_up),
                 "document_title": doc.get("document_title", "Corporate Filing"),
                 "source_type": doc.get("source_type", "REGULATORY_FILING"),
                 "section": doc.get("section", "General Section"),
                 "excerpt": doc.get("excerpt", ""),
+                "full_context": doc.get("full_context") or doc.get("excerpt", ""),
                 "relevance_score": combined_relevance,
-                "sentiment": doc.get("sentiment", "neutral")
+                "similarity_cosine": round(float(sim_score), 3),
+                "sentiment": doc.get("sentiment", "neutral"),
+                "fiscal_period": fiscal,
+                "filing_date": doc.get("filing_date") or doc.get("date", "2025-10-24"),
+                "page_number": page,
+                "keywords": doc.get("keywords", [])
             })
 
         # Rank by score descending

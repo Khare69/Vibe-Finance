@@ -368,28 +368,37 @@ export default function MultiAgentDebate({
             {/* Highlight-to-Source Citations */}
             {rag?.citations && rag.citations.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1">
-                  <FileText className="w-3 h-3" /> Exact Source Citations (Click to View)
+                <div className="text-[11px] font-bold uppercase tracking-wider text-indigo-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <FileText className="w-3 h-3" /> Exact Source Evidence ({rag.citations.length})
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">Click to explore</span>
                 </div>
-                <div className="space-y-1.5">
-                  {rag.citations.map((cite) => (
+                <div className="space-y-2">
+                  {rag.citations.map((cite, cIdx) => (
                     <button
-                      key={cite.id}
+                      key={cite.id || cIdx}
                       type="button"
                       onClick={() => onOpenCitation(cite)}
-                      className="w-full text-left p-2 rounded-lg bg-indigo-950/30 hover:bg-indigo-900/40 border border-indigo-500/20 hover:border-indigo-500/40 transition-all flex items-center justify-between group"
+                      className="w-full text-left p-2.5 rounded-xl bg-slate-900/90 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/40 transition-all flex flex-col gap-1.5 group cursor-pointer shadow-sm"
                     >
-                      <div className="truncate pr-2">
-                        <div className="text-[11px] font-semibold text-slate-200 group-hover:text-indigo-300 truncate">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[11px] font-bold text-slate-200 group-hover:text-indigo-300 line-clamp-1">
                           {cite.document_title}
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {cite.section}
-                        </div>
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0 border border-indigo-500/30">
+                          {Math.round(cite.relevance_score * 100)}% Match
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
-                        {Math.round(cite.relevance_score * 100)}% Match
-                      </span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                        <span className="truncate pr-1">
+                          {cite.section}
+                          {cite.page_number ? ` · Page ${cite.page_number}` : ''}
+                        </span>
+                        <span className="shrink-0 text-slate-500">
+                          {cite.fiscal_period || 'FY26'}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -574,6 +583,24 @@ export default function MultiAgentDebate({
                     </span>
                   </div>
                   <p className="text-slate-300 leading-relaxed">{step.text}</p>
+
+                  {/* Referenced Evidence Chips for Fundamental RAG */}
+                  {isRag && rag?.citations && rag.citations.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-slate-500 font-mono">Filing Evidence:</span>
+                      {rag.citations.map((cite, cIdx) => (
+                        <button
+                          key={cite.id || cIdx}
+                          type="button"
+                          onClick={() => onOpenCitation(cite)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-violet-950/60 hover:bg-violet-900/80 border border-violet-500/30 text-violet-300 hover:text-white transition-all cursor-pointer"
+                        >
+                          <BookOpen className="w-2.5 h-2.5 text-violet-400" />
+                          <span>Doc #{cIdx + 1}: {cite.document_title?.split(' ')[0] || 'Filing'} ({cite.fiscal_period || 'Q3'})</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );

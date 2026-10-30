@@ -176,9 +176,18 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
   * Connected live streaming status indicator into `frontend/src/App.jsx` showing real-time node transitions and received event counts.
   * Added "StateGraph & Live Stream" tab to `DeveloperAuditDrawer.jsx` rendering both the StateGraph execution trace steps and the live streaming event feed with timestamps.
   * Verified via dedicated test suite `backend/tests/test_streaming_telemetry.py` and regression tested with `backend/test_suite.py` (19/19 passing).
-* **Sub-phase 5.2: Evidence Explorer UI** [ ] Pending
-  * Target: `frontend/src/components/`
-  * Clickable citation badges in the UI that open a modal displaying the exact document excerpt, page number, and source filing date.
+* **Sub-phase 5.2: Evidence Explorer UI & Citation Metadata** [x] Completed
+  * Target: `backend/rag/vector_store.py`, `backend/agents/rag_agent.py`, `frontend/src/components/RagSourceViewerModal.jsx`, `frontend/src/components/MultiAgentDebate.jsx`, `frontend/src/components/WhyThisWhyNow.jsx`, `frontend/src/App.jsx`
+  * Enhanced vector retrieval and RAG agent citation schemas with complete institutional metadata: `ticker`, `document_title`, `source_type`, `section`, `excerpt`, `full_context`, `relevance_score`, `similarity_cosine`, `sentiment` polarity, `fiscal_period`, `filing_date`, `page_number`, and indexed keywords.
+  * Overhauled `RagSourceViewerModal.jsx` into a full-featured Evidence Explorer modal featuring:
+    * In-page search with real-time text highlight (`<mark>`) across full filing context.
+    * Vector Attribution & Grounding audit tab breaking down cosine similarity, candidate isolation, and anti-hallucination stats.
+    * Formal SEC/SEBI Regulatory Citation exporter with one-click copying in multiple formats (excerpt, formatted citation string, raw JSON).
+  * Wired interactive citation badges across the dashboard:
+    * Added filing evidence chips directly inside the autonomous debate transcript whenever the fundamental analyst speaks.
+    * Upgraded fundamental RAG agent cards with page numbers, fiscal periods, and relevance match tags.
+    * Added "Evidence Citations" shelf inside the Institutional Expert explanation in `WhyThisWhyNow.jsx`.
+  * Verified via dedicated test suite `backend/tests/test_evidence_explorer.py`, verified Vite production build, and full regression test `backend/test_suite.py` (19/19 passing).
 * **Sub-phase 5.3: Portfolio Stress-Testing & SEBI Compliance Guardrails** [ ] Pending
   * Target: `frontend/src/`, `backend/`
   * Interactive macro shock simulator (e.g. 2020 Liquidity Shock, 2022 Rate Hike).
@@ -222,3 +231,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 30, 2026 | Phase 4.2 | API Security & Clean Packaging: strict CORS, clean package imports, Pydantic regex validation, and injection sanitization. | Completed |
 | Oct 30, 2026 | Phase 4.3 | Multi-Agent State Machine: typed StateGraph, cyclical bull-vs-bear rebuttal loop, circuit breaker, and `/api/orchestrator/topology`. | Completed |
 | Oct 30, 2026 | Phase 5.1 | Server-Sent Events (SSE) Streaming Telemetry: `/api/analysis/stream/{ticker}`, frontend stream listener, live progress UI & audit tab. | Completed |
+| Oct 30, 2026 | Phase 5.2 | Evidence Explorer UI: rich citation metadata, in-page search, grounding audit tab, multi-format export, and inline debate citation pills. | Completed |

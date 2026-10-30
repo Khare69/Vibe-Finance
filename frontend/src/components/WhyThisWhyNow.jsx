@@ -1,10 +1,12 @@
 import React from 'react';
-import { HelpCircle, Brain, SlidersHorizontal, BookOpen, Layers } from 'lucide-react';
+import { HelpCircle, Brain, SlidersHorizontal, BookOpen, Layers, FileText } from 'lucide-react';
 
 export default function WhyThisWhyNow({
   synthesis,
   explainMode = 'beginner',
   onToggleExplainMode,
+  citations = [],
+  onOpenCitation = () => {},
 }) {
   if (!synthesis) return null;
 
@@ -156,6 +158,29 @@ export default function WhyThisWhyNow({
             : synthesis.explain_modes?.expert ||
               'Factor alpha is constrained by rising debt-service coverage ratios despite positive technical momentum divergence.'}
         </p>
+
+        {/* Clickable Regulatory Citations Shelf */}
+        {citations && citations.length > 0 && (
+          <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
+              <FileText className="w-3 h-3 text-indigo-400" /> Evidence Citations:
+            </span>
+            {citations.map((cite, idx) => (
+              <button
+                key={cite.id || idx}
+                type="button"
+                onClick={() => onOpenCitation(cite)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/50 hover:bg-indigo-900/70 border border-indigo-500/30 text-indigo-300 hover:text-white text-xs font-mono transition-all cursor-pointer shadow-xs"
+              >
+                <BookOpen className="w-3 h-3 text-indigo-400" />
+                <span className="truncate max-w-[200px]">{cite.document_title}</span>
+                <span className="text-[10px] text-indigo-400/80 px-1 py-0.2 rounded bg-indigo-500/20">
+                  {Math.round((cite.relevance_score || 0.9) * 100)}%
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
