@@ -137,7 +137,7 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 4: Backend Architecture, State Orchestration & Security Hardening
-*Status: [-] In Progress*
+*Status: [x] Completed*
 
 * **Sub-phase 4.1: Async Event Loop & Network Optimization** [x] Completed
   * Target: `backend/main.py`, `backend/agents/llm_client.py`, `backend/agents/rag_agent.py`, `backend/agents/quant_agent.py`, `backend/agents/behavioral_agent.py`, `backend/agents/debate_engine.py`, `backend/agents/synthesis_agent.py`, `backend/database.py`
@@ -155,9 +155,13 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
   * Implemented ticker sanitization and prompt-injection filtering across incoming documents and decision memos.
   * Added path-traversal sanitization (`safe_filename`) for uploaded PDF/text files.
   * Verified via dedicated test suite `backend/tests/test_api_security.py` and regression tested with `backend/test_suite.py` (19/19 passing).
-* **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)** [ ] Pending
-  * Target: `backend/agents/`
-  * Structure agent orchestration into a typed cyclic directed graph (`StateGraph`) with explicit bull-vs-bear debate cycles and circuit breakers.
+* **Sub-phase 4.3: Multi-Agent State Machine (LangGraph / Typed State Graph)** [x] Completed
+  * Target: `backend/agents/orchestrator.py`, `backend/agents/__init__.py`, `backend/main.py`
+  * Structured multi-agent orchestration into a strongly typed cyclic directed graph (`MultiAgentStateGraph` and `MultiAgentState`).
+  * Designed explicit node stages: `fetch_market_context` -> `parallel_analysts` (with timeout circuit breaker) -> `adversarial_debate` -> `convergence_guard` (conditional edge) -> `adversarial_rebuttal` (cyclic cross-examination) -> `synthesis` -> `telemetry`.
+  * Added `GET /api/orchestrator/topology` returning the graph engine specifications and node graph topology.
+  * Delegated `/api/analyze` to `multi_agent_graph.execute(state)` with complete `execution_trace` step telemetry.
+  * Verified via dedicated test suite `backend/tests/test_multi_agent_state_graph.py` and full regression test `backend/test_suite.py` (19/19 passing).
 
 ---
 
@@ -211,3 +215,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 29, 2026 | Phase 3.3 | Integrated dynamic backtest UI: equity curve chart with Recharts, risk badges, point-in-time barometer, and currency detection. | Completed |
 | Oct 29, 2026 | Phase 4.1 | Non-blocking async event loop: `httpx.AsyncClient` pool, parallel `asyncio.gather` agent tasks, and async DB wrappers. | Completed |
 | Oct 30, 2026 | Phase 4.2 | API Security & Clean Packaging: strict CORS, clean package imports, Pydantic regex validation, and injection sanitization. | Completed |
+| Oct 30, 2026 | Phase 4.3 | Multi-Agent State Machine: typed StateGraph, cyclical bull-vs-bear rebuttal loop, circuit breaker, and `/api/orchestrator/topology`. | Completed |

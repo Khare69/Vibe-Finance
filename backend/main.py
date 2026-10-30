@@ -18,6 +18,7 @@ from backend.agents.rag_agent import rag_agent
 from backend.agents.behavioral_agent import behavioral_agent
 from backend.agents.debate_engine import debate_engine
 from backend.agents.synthesis_agent import synthesis_agent
+from backend.agents.orchestrator import multi_agent_graph, MultiAgentState
 from backend.agents.llm_client import llm_client
 from backend.personalization.profiler import user_profiler
 from backend.personalization.portfolio import portfolio_service
@@ -142,115 +143,57 @@ async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):
     safe_tf = timeframe if timeframe in ["1M", "3M", "1Y"] else "1M"
     return await asyncio.to_thread(market_service.get_history, ticker=safe_ticker, timeframe=safe_tf)
 
+@app.get("/api/orchestrator/topology")
+async def get_orchestrator_topology():
+    return {
+        "engine": "Typed Cyclic Directed StateGraph",
+        "nodes": [
+            {"name": "fetch_market_context", "type": "IO", "description": "Loads market OHLCV data & user profile"},
+            {"name": "parallel_analysts", "type": "Parallel_Execution", "description": "Runs Quant, RAG, and Risk agents concurrently with circuit breakers"},
+            {"name": "adversarial_debate", "type": "Cross_Examination", "description": "Arbitrates bull-vs-bear arguments and computes conflict score"},
+            {"name": "convergence_guard", "type": "Conditional_Edge", "description": "Evaluates consensus and divergence thresholds; routes to rebuttal or synthesis"},
+            {"name": "adversarial_rebuttal", "type": "Cyclic_Rebuttal", "description": "Re-calibrates confidence and refines stance with cross-agent feedback"},
+            {"name": "synthesis", "type": "Consensus_Synthesis", "description": "Formulates multi-factor weighted allocations and explanations"},
+            {"name": "telemetry", "type": "Audit_Logging", "description": "Records execution latency, vector stats, and degraded modes"}
+        ],
+        "state_schema": list(MultiAgentState.model_fields.keys())
+    }
+
 @app.post("/api/analyze")
 async def analyze_stock(req: AnalyzeRequest):
-    overall_start = time.perf_counter()
     ticker = sanitize_ticker(req.ticker)
-    sim_stale = bool(req.simulated_stale_data)
-    sim_timeout = bool(req.simulated_rag_timeout)
-    
-    # 1. Fetch market data non-blockingly via worker thread
-    stock_info = await asyncio.to_thread(market_service.get_stock_info, ticker)
-    company_name = stock_info["name"] if stock_info else f"{ticker} Corp"
-    market_data = await asyncio.to_thread(market_service.get_market_data, ticker, sim_stale)
-    
-    # 2. Resolve User Profile
     profile_dict = req.user_profile.model_dump() if req.user_profile else {}
-    resolved_profile = await asyncio.to_thread(user_profiler.get_profile, profile_dict)
 
-    # 3. Parallel Agent Orchestration with asyncio.gather (Zero Event-Loop Blocking)
-    quant_task = quant_agent.analyze_async(ticker, market_data)
-    rag_task = rag_agent.analyze_async(ticker, simulated_rag_timeout=sim_timeout)
-    behavioral_task = behavioral_agent.analyze_async(ticker, resolved_profile, market_data)
-
-    results = await asyncio.gather(quant_task, rag_task, behavioral_task, return_exceptions=True)
-
-    quant_res = results[0] if not isinstance(results[0], Exception) else {
-        "name": "Quantitative Analyst", "stance": "NEUTRAL", "score": 50, "latency_ms": 1,
-        "signals": ["Quantitative analysis recovered from error"], "metrics": {}
-    }
-    rag_res = results[1] if not isinstance(results[1], Exception) else {
-        "name": "Fundamental Researcher", "stance": "NEUTRAL", "score": 50, "latency_ms": 1,
-        "timed_out": True, "key_findings": ["RAG agent exception handled gracefully"], "citations": []
-    }
-    behavioral_res = results[2] if not isinstance(results[2], Exception) else {
-        "name": "Behavioral Risk Manager", "stance": "CAUTION", "score": 50, "latency_ms": 1,
-        "user_risk_profile": "moderate", "behavioral_adjustments": []
-    }
-
-    # 4. Async Debate & Consensus Arbitrage
-    debate_res = await debate_engine.conduct_debate_async(
+    initial_state = MultiAgentState(
         ticker=ticker,
-        quant_result=quant_res,
-        rag_result=rag_res,
-        behavioral_result=behavioral_res,
-        stale_data=sim_stale
+        user_profile=profile_dict,
+        simulated_stale_data=bool(req.simulated_stale_data),
+        simulated_rag_timeout=bool(req.simulated_rag_timeout)
     )
 
-    # 5. Async Synthesis
-    synthesis_res = await synthesis_agent.synthesize_async(
-        ticker=ticker,
-        quant_result=quant_res,
-        rag_result=rag_res,
-        behavioral_result=behavioral_res,
-        debate_result=debate_res,
-        market_data=market_data
-    )
-
-    # 6. Sentiment Timeline non-blocking
-    sentiment_shift = await asyncio.to_thread(rag_retriever.get_sentiment_timeline, ticker)
-
-    # 7. Telemetry & Degradation Flags
-    total_elapsed_ms = max(int((time.perf_counter() - overall_start) * 1000), 1)
-
-    degraded_data = sim_stale or sim_timeout
-    degraded_reason = None
-    if sim_stale and sim_timeout:
-        degraded_reason = "Simulated stale feed and fundamental RAG timeout"
-    elif sim_stale:
-        degraded_reason = "Simulated stale data feed fallback"
-    elif sim_timeout:
-        degraded_reason = "Fundamental RAG search timed out after 5000ms threshold"
-
-    # Calibration confidence
-    confidence_score = debate_res["confidence_calibration_score"]
-    if sim_stale:
-        confidence_score = min(60, confidence_score)
-
-    telemetry_data = await asyncio.to_thread(
-        audit_logger.log_analysis,
-        ticker=ticker,
-        total_ms=total_elapsed_ms,
-        quant_ms=quant_res["latency_ms"],
-        rag_ms=rag_res["latency_ms"],
-        risk_ms=behavioral_res["latency_ms"],
-        vector_ms=rag_res.get("latency_ms", 1) if not sim_timeout else 0,
-        documents_scanned=len(rag_res["citations"]) + 2 if not sim_timeout else 0,
-        confidence_score=confidence_score,
-        degraded_data=degraded_data,
-        degraded_reason=degraded_reason
-    )
+    final_state = await multi_agent_graph.execute(initial_state)
 
     return {
-        "ticker": ticker,
-        "company_name": company_name,
+        "ticker": final_state.ticker,
+        "company_name": final_state.company_name,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "price_data": {
-            "current_price": market_data["current_price"],
-            "change_percent": market_data["change_percent"],
-            "volume_anomaly_ratio": market_data["volume_anomaly_ratio"],
-            "feed_status": market_data["feed_status"],
-            "confidence_penalty": market_data["confidence_penalty"]
+            "current_price": final_state.market_data.get("current_price", 100.0),
+            "change_percent": final_state.market_data.get("change_percent", 0.0),
+            "volume_anomaly_ratio": final_state.market_data.get("volume_anomaly_ratio", 1.0),
+            "feed_status": final_state.market_data.get("feed_status", "LIVE"),
+            "confidence_penalty": final_state.market_data.get("confidence_penalty", 0.0)
         },
         "agents": {
-            "quant": quant_res,
-            "rag": rag_res,
-            "behavioral_risk": behavioral_res
+            "quant": final_state.quant_result,
+            "rag": final_state.rag_result,
+            "behavioral_risk": final_state.behavioral_result
         },
-        "debate": debate_res,
-        "synthesis": synthesis_res,
-        "sentiment_shift": sentiment_shift,
-        "telemetry": telemetry_data
+        "debate": final_state.debate_result,
+        "synthesis": final_state.synthesis_result,
+        "sentiment_shift": final_state.sentiment_shift,
+        "telemetry": final_state.telemetry,
+        "execution_trace": final_state.execution_trace
     }
 
 @app.post("/api/simulate-trade")
