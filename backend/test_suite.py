@@ -301,8 +301,23 @@ def run_all_tests():
     assert any(m["id"] == "memo-rest-test-1" for m in all_memos)
     print("19. Persistent SQLite REST Endpoints Integration Passed: User profile and decision memos verified.")
 
+    # 20. Test Mathematical Properties & Quantitative Invariants
+    from backend.tests.test_mathematical_properties import (
+        test_rsi_mathematical_invariants,
+        test_moving_averages_and_macd_properties,
+        test_volume_anomaly_properties,
+        test_backtest_performance_metrics_math,
+        test_portfolio_conservation_laws
+    )
+    test_rsi_mathematical_invariants()
+    test_moving_averages_and_macd_properties()
+    test_volume_anomaly_properties()
+    test_backtest_performance_metrics_math()
+    test_portfolio_conservation_laws()
+    print("20. Mathematical Properties & Invariants Passed: RSI bounds, MACD identities, volume anomaly, CAGR, Max Drawdown, and portfolio conservation laws verified.")
+
     print("\n==========================================")
-    print("SUCCESS: ALL 19 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    print("SUCCESS: ALL 20 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

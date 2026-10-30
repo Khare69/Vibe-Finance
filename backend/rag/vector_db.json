@@ -382,5 +382,19 @@
     "keywords": [
       "record"
     ]
+  },
+  {
+    "id": "amd-upload-1793378392-24",
+    "ticker": "AMD",
+    "document_title": "AMD Form 10-K Annual Report",
+    "source_type": "USER_UPLOAD",
+    "fiscal_period": "Q3 FY26",
+    "section": "Item 7 MD&A",
+    "excerpt": "Data Center enterprise EPYC processor sales expanded 122% YoY, driving record server market share gains.",
+    "sentiment": "positive",
+    "relevance_base": 0.88,
+    "keywords": [
+      "record"
+    ]
   }
 ]

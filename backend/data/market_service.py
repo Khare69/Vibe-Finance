@@ -153,7 +153,7 @@ class MarketService:
             avg_loss = (avg_loss * (period - 1) + losses[i]) / period
 
         if avg_loss == 0.0:
-            return 100.0
+            return 50.0 if avg_gain == 0.0 else 100.0
         rs = avg_gain / avg_loss
         return round(100.0 - (100.0 / (1.0 + rs)), 1)
 
@@ -204,6 +204,15 @@ class MarketService:
             "signal": round(signal_line, 2),
             "hist": round(hist, 2)
         }
+
+    @staticmethod
+    def calculate_volume_anomaly(current_volume: float, historical_volumes: List[float], window: int = 20) -> float:
+        """Calculates volume anomaly ratio relative to N-day moving average volume."""
+        if not historical_volumes:
+            return 1.0
+        recent = historical_volumes[-window:] if len(historical_volumes) >= window else historical_volumes
+        avg_vol = float(np.mean(recent)) if recent else 1.0
+        return round(float(current_volume) / avg_vol, 2) if avg_vol > 0 else 1.0
 
     @staticmethod
     def calculate_momentum_score(

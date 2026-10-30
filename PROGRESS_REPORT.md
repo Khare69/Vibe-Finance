@@ -199,15 +199,21 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 ---
 
 ### Phase 6: Automated Evaluation, Test Suite Overhaul & CI/CD
-*Status: [ ] Pending*
+*Status: [ ] In Progress*
 
-* **Sub-phase 6.1: Comprehensive Test Suite Overhaul**
-  * Target: `backend/test_suite.py`, `backend/tests/`
-  * Replace hardcoded value assertions with property-based and mathematical tests (e.g. verifying Wilder's RSI against known mathematical baselines).
-* **Sub-phase 6.2: RAG Faithfulness & Citation Evaluation**
+* **Sub-phase 6.1: Comprehensive Test Suite Overhaul & Mathematical Properties** [x] Completed
+  * Target: `backend/test_suite.py`, `backend/tests/test_mathematical_properties.py`, `backend/data/market_service.py`
+  * Replaced static lookup tests with formal property-based and mathematical invariance tests:
+    * **RSI Boundary & Monotonicity:** Verified strictly bounded in `[0, 100]`, equals `100.0` on pure upward series, `0.0` on pure downward series, and `50.0` on zero-variance series.
+    * **Moving Averages & MACD Algebra:** Verified exact SMA definition on N-periods, EMA exponential recency weighting, and MACD algebraic balance (`hist == line - signal`).
+    * **Volume Anomaly Ratio:** Implemented `calculate_volume_anomaly` verifying exact ratio against 20-day mean volume with graceful 1.0x baseline fallback.
+    * **Backtesting Mathematical Formulas:** Validated compound annual growth rate (CAGR), maximum drawdown non-positive invariant, and benchmark alpha identity ($R_p - R_b$).
+    * **Portfolio Conservation Laws:** Validated Total Portfolio Value = Invested Value + Cash, sum of allocations = 100.0%, and stress test value conservation ($\Delta V = \sum \Delta v_i$).
+  * Overhauled `backend/test_suite.py` to seamlessly execute all 20 end-to-end integration and mathematical invariance test scenarios with 100% accuracy.
+* **Sub-phase 6.2: RAG Faithfulness & Citation Evaluation** [ ] Pending
   * Target: `backend/tests/`
   * Automated LLM-as-a-judge / Ragas evaluation suite checking hallucination rates, citation validity, and abstention behavior.
-* **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow**
+* **Sub-phase 6.3: Dockerization & GitHub Actions CI Workflow** [ ] Pending
   * Target: `.github/workflows/ci.yml`, `Dockerfile`, `docker-compose.yml`
   * Automate linting, testing, and containerized deployment verification.
 
@@ -236,3 +242,4 @@ The overhaul is divided into six sequential, non-breaking phases. Each sub-phase
 | Oct 30, 2026 | Phase 5.1 | Server-Sent Events (SSE) Streaming Telemetry: `/api/analysis/stream/{ticker}`, frontend stream listener, live progress UI & audit tab. | Completed |
 | Oct 30, 2026 | Phase 5.2 | Evidence Explorer UI: rich citation metadata, in-page search, grounding audit tab, multi-format export, and inline debate citation pills. | Completed |
 | Oct 30, 2026 | Phase 5.3 | Portfolio Stress-Testing & SEBI Compliance Guardrails: 4 macro shock scenarios, holding breakdown table, cash runway, and statutory disclaimers. | Completed |
+| Oct 30, 2026 | Phase 6.1 | Comprehensive Test Suite Overhaul: mathematical invariance tests for RSI, MACD, Volume Anomaly, CAGR, drawdown, portfolio conservation laws, and expanded test runner (20/20 passing). | Completed |
