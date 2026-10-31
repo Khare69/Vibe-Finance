@@ -147,6 +147,32 @@ def test_portfolio_conservation_laws():
     print(f"  [PASSED] Conservation Law 3: Shocked Invested ({round(shocked_sum, 2)}) == Original ({round(orig_sum, 2)}) + Delta ({round(delta_sum, 2)})")
 
 
+def test_attribution_weights_invariance():
+    print("\n--- 6. Testing Synthesis Attribution Weights Conservation Law ---")
+    from backend.agents.synthesis_agent import synthesis_agent
+
+    dummy_quant = {"score": 75, "stance": "BULLISH"}
+    dummy_rag = {"score": 45, "stance": "BEARISH", "timed_out": False}
+    dummy_risk = {"score": 50, "user_risk_profile": "conservative"}
+    dummy_debate = {"has_disagreement": True}
+    dummy_market = {"current_price": 100.0, "symbol": "$"}
+
+    # Standard deliberation mode
+    res_normal = synthesis_agent._calculate_action_and_weights("TEST", dummy_quant, dummy_rag, dummy_risk, dummy_debate, dummy_market)
+    weights_normal = res_normal["weight_breakdown"]
+    sum_normal = sum(weights_normal.values())
+    assert sum_normal == 100, f"Normal weights sum {sum_normal} != 100"
+    print(f"  [PASSED] Invariant 6A: Normal Attribution Decomposition {weights_normal} == 100%")
+
+    # Circuit breaker / RAG timeout mode
+    dummy_rag_timeout = {"score": 50, "stance": "NEUTRAL", "timed_out": True}
+    res_timeout = synthesis_agent._calculate_action_and_weights("TEST", dummy_quant, dummy_rag_timeout, dummy_risk, dummy_debate, dummy_market)
+    weights_timeout = res_timeout["weight_breakdown"]
+    sum_timeout = sum(weights_timeout.values())
+    assert sum_timeout == 100, f"Timeout weights sum {sum_timeout} != 100"
+    print(f"  [PASSED] Invariant 6B: Degraded RAG-Timeout Decomposition {weights_timeout} == 100%")
+
+
 def main():
     print("=== Testing Sub-phase 6.1: Comprehensive Test Suite & Mathematical Properties ===")
     test_rsi_mathematical_invariants()
@@ -154,6 +180,7 @@ def main():
     test_volume_anomaly_properties()
     test_backtest_performance_metrics_math()
     test_portfolio_conservation_laws()
+    test_attribution_weights_invariance()
     print("\n[SUCCESS] Sub-phase 6.1 Mathematical Properties & Invariants verified with 100% accuracy!")
 
 

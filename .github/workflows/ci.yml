@@ -2,9 +2,9 @@ name: Vibe Finance CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, debugging ]
+    branches: [ main, debugging, debugging-and-error-correction, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
 
 jobs:
   backend-test:
@@ -35,6 +35,11 @@ jobs:
           # Exit-zero treats all formatting errors as warnings
           flake8 backend --count --exit-zero --max-complexity=15 --max-line-length=127 --statistics
 
+      - name: Dependency Security Audit (Python pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit --desc on || true
+
       - name: Execute End-to-End Test Suite (All 21 Scenarios)
         env:
           PYTHONPATH: .
@@ -59,6 +64,10 @@ jobs:
       - name: Install Node dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Dependency Security Audit (npm audit)
+        working-directory: frontend
+        run: npm audit --audit-level=high || true
 
       - name: Build React + Vite Production Bundle
         working-directory: frontend

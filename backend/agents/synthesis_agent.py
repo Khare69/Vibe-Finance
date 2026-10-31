@@ -44,6 +44,17 @@ class SynthesisAgent:
             }
             weighted_score = (quant_score * 0.35) + (rag_score * 0.40) + (behavioral_score * 0.25)
 
+        # Enforce mathematical invariance: attribution weights must strictly sum to 100%
+        total_weight = sum(weight_breakdown.values())
+        if total_weight != 100:
+            scale = 100.0 / total_weight
+            weight_breakdown = {k: int(round(v * scale)) for k, v in weight_breakdown.items()}
+            discrepancy = 100 - sum(weight_breakdown.values())
+            if discrepancy != 0:
+                highest_k = max(weight_breakdown, key=weight_breakdown.get)
+                weight_breakdown[highest_k] += discrepancy
+        assert sum(weight_breakdown.values()) == 100, f"Attribution weights sum ({sum(weight_breakdown.values())}) must equal 100"
+
         # Action determination
         if rag_timed_out:
             headline = "Recommendation based on Technicals only; Fundamental analysis pending"

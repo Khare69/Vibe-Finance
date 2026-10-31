@@ -73,7 +73,11 @@ DEFAULT_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
 ]
 env_origins = os.environ.get("ALLOWED_ORIGINS")
-allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()] if env_origins else DEFAULT_ALLOWED_ORIGINS
+allowed_origins = [o.strip() for o in env_origins.split(",") if o.strip()] if env_origins else list(DEFAULT_ALLOWED_ORIGINS)
+for env_key in ("VITE_API_URL", "FRONTEND_URL"):
+    env_val = os.environ.get(env_key)
+    if env_val and env_val.strip() and env_val.strip() not in allowed_origins:
+        allowed_origins.append(env_val.strip())
 
 app.add_middleware(
     CORSMiddleware,
@@ -218,6 +222,11 @@ async def analyze_stock(req: AnalyzeRequest):
     )
 
     final_state = await multi_agent_graph.execute(initial_state)
+
+    # Mathematical invariant check: assert attribution weights strictly sum to 100%
+    synth_weights = final_state.synthesis_result.get("weight_breakdown", {})
+    if synth_weights:
+        assert sum(synth_weights.values()) == 100, f"Attribution weights sum must equal 100%, got {sum(synth_weights.values())}"
 
     return {
         "ticker": final_state.ticker,

@@ -307,14 +307,16 @@ def run_all_tests():
         test_moving_averages_and_macd_properties,
         test_volume_anomaly_properties,
         test_backtest_performance_metrics_math,
-        test_portfolio_conservation_laws
+        test_portfolio_conservation_laws,
+        test_attribution_weights_invariance
     )
     test_rsi_mathematical_invariants()
     test_moving_averages_and_macd_properties()
     test_volume_anomaly_properties()
     test_backtest_performance_metrics_math()
     test_portfolio_conservation_laws()
-    print("20. Mathematical Properties & Invariants Passed: RSI bounds, MACD identities, volume anomaly, CAGR, Max Drawdown, and portfolio conservation laws verified.")
+    test_attribution_weights_invariance()
+    print("20. Mathematical Properties & Invariants Passed: RSI bounds, MACD identities, volume anomaly, CAGR, Max Drawdown, portfolio conservation laws, and attribution weights invariance verified.")
 
     # 21. Test RAG Faithfulness & Citation Evaluation Benchmark
     from backend.rag.evaluator import rag_evaluator
