@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from backend.main import (
     get_health,
+    get_ready,
     list_stocks,
     analyze_stock,
     simulate_trade,
@@ -27,12 +28,17 @@ def run_coro(coro):
 def run_all_tests():
     print("Running Vibe Finance Multi-Agent Backend Tests...\n")
 
-    # 1. Test Health
+    # 1. Test Health & Readiness Probe Split
     health = run_coro(get_health())
     assert health["status"] == "healthy"
     assert health["version"] == "1.0.0"
     assert health["rag_corpus_documents"] >= 6
-    print("1. Health Endpoint Passed:", health)
+    ready = run_coro(get_ready())
+    assert ready["status"] in ["ready", "unhealthy"]
+    assert "database" in ready
+    assert "vector_store" in ready
+    assert "market_feed" in ready
+    print("1. Health & Readiness Probe Passed: Liveness and Deep Ready diagnostics verified.")
 
     # 2. Test Stocks
     stocks = run_coro(list_stocks())
@@ -195,7 +201,16 @@ def run_all_tests():
     db.delete_holding("TESTSTOCK")
     fetched_after = [h.ticker for h in db.get_all_holdings()]
     assert "TESTSTOCK" not in fetched_after
-    print("13. Portfolio Holding CRUD Passed: Add and delete verified.")
+
+    # Test Anti-Reseeding Guard: clearing all holdings must return [] without re-seeding demo holdings
+    all_current = db.get_all_holdings()
+    db.clear_all_holdings()
+    empty_holdings = db.get_all_holdings()
+    assert len(empty_holdings) == 0, f"Anti-reseeding bug triggered: expected 0 holdings, got {len(empty_holdings)}"
+    for h in all_current:
+        db.upsert_holding(h)
+    assert len(db.get_all_holdings()) == len(all_current)
+    print("13. Portfolio Holding CRUD Passed: Add, delete, and anti-reseeding guard verified.")
 
     # 14. Test Watchlist & Decision Memo Persistence
     db.add_to_watchlist(WatchlistDB(ticker="NVDA", target_price=130.0, notes="Wait for support"))

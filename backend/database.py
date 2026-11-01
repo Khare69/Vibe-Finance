@@ -7,17 +7,39 @@ from datetime import datetime, timezone
 from backend.models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "vibe_finance.db")
+_db_initialized = False
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    """Returns a SQLite connection configured with WAL journal mode and busy timeout for high concurrency."""
+    conn = sqlite3.connect(DB_PATH, timeout=15.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
     return conn
 
-def init_db():
-    """Initializes tables and seeds baseline data if not present."""
+def init_db(force: bool = False):
+    """
+    Initializes tables and seeds baseline data strictly once.
+    Tracks one-time seeding completion in `app_metadata` to permanently prevent
+    the auto-reseeding bug when a user clears all portfolio holdings.
+    """
+    global _db_initialized
+    if _db_initialized and not force:
+        return
+
     with get_connection() as conn:
         cursor = conn.cursor()
         
+        # Metadata / Migration Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
+
         # User Profile Table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_profiles (
@@ -68,38 +90,50 @@ def init_db():
 
         conn.commit()
 
-        # Seed initial user profile if empty
-        cursor.execute("SELECT COUNT(*) as cnt FROM user_profiles")
-        if cursor.fetchone()["cnt"] == 0:
-            cursor.execute("""
-                INSERT INTO user_profiles (id, risk_level, investment_horizon, panic_sell_tendency, preferred_sectors, portfolio_cash, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                "default_user",
-                "conservative",
-                "medium",
-                0.8,
-                json.dumps(["Energy", "Tech"]),
-                250000.0,
-                datetime.now(timezone.utc).isoformat()
-            ))
+        # Check if initial one-time seed has already been recorded
+        cursor.execute("SELECT value FROM app_metadata WHERE key = 'initial_seed_completed'")
+        seed_meta = cursor.fetchone()
 
-        # Seed initial holdings if empty
-        cursor.execute("SELECT COUNT(*) as cnt FROM portfolio_holdings")
-        if cursor.fetchone()["cnt"] == 0:
-            seeds = [
-                ("RELIANCE", "Reliance Industries Ltd.", 50.0, 2720.00, "INR", "Energy", 0.88),
-                ("TCS", "Tata Consultancy Services Ltd.", 30.0, 3850.00, "INR", "Tech", 0.72),
-                ("AAPL", "Apple Inc.", 35.0, 215.00, "USD", "Tech", 1.05),
-                ("HDFCBANK", "HDFC Bank Ltd.", 40.0, 1640.00, "INR", "Financials", 0.92)
-            ]
-            for s in seeds:
+        if not seed_meta:
+            # Seed initial user profile if empty
+            cursor.execute("SELECT COUNT(*) as cnt FROM user_profiles")
+            if cursor.fetchone()["cnt"] == 0:
                 cursor.execute("""
-                    INSERT INTO portfolio_holdings (ticker, company_name, shares, avg_cost, currency, sector, beta, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (*s, datetime.now(timezone.utc).isoformat()))
+                    INSERT INTO user_profiles (id, risk_level, investment_horizon, panic_sell_tendency, preferred_sectors, portfolio_cash, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    "default_user",
+                    "conservative",
+                    "medium",
+                    0.8,
+                    json.dumps(["Energy", "Tech"]),
+                    250000.0,
+                    datetime.now(timezone.utc).isoformat()
+                ))
 
-        conn.commit()
+            # Seed initial holdings if empty
+            cursor.execute("SELECT COUNT(*) as cnt FROM portfolio_holdings")
+            if cursor.fetchone()["cnt"] == 0:
+                seeds = [
+                    ("RELIANCE", "Reliance Industries Ltd.", 50.0, 2720.00, "INR", "Energy", 0.88),
+                    ("TCS", "Tata Consultancy Services Ltd.", 30.0, 3850.00, "INR", "Tech", 0.72),
+                    ("AAPL", "Apple Inc.", 35.0, 215.00, "USD", "Tech", 1.05),
+                    ("HDFCBANK", "HDFC Bank Ltd.", 40.0, 1640.00, "INR", "Financials", 0.92)
+                ]
+                for s in seeds:
+                    cursor.execute("""
+                        INSERT INTO portfolio_holdings (ticker, company_name, shares, avg_cost, currency, sector, beta, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (*s, datetime.now(timezone.utc).isoformat()))
+
+            # Record that one-time initial seed completed
+            cursor.execute("""
+                INSERT OR REPLACE INTO app_metadata (key, value, created_at)
+                VALUES ('initial_seed_completed', 'true', ?)
+            """, (datetime.now(timezone.utc).isoformat(),))
+            conn.commit()
+
+    _db_initialized = True
 
 # --- Repository Methods ---
 
@@ -110,7 +144,6 @@ def get_user_profile(user_id: str = "default_user") -> UserProfileDB:
         cursor.execute("SELECT * FROM user_profiles WHERE id = ?", (user_id,))
         row = cursor.fetchone()
         if not row:
-            # Fallback default
             return UserProfileDB(id=user_id)
         
         sectors = json.loads(row["preferred_sectors"]) if row["preferred_sectors"] else ["Energy", "Tech"]
@@ -206,6 +239,15 @@ def delete_holding(ticker: str) -> bool:
         cursor.execute("DELETE FROM portfolio_holdings WHERE ticker = ?", (ticker.upper(),))
         conn.commit()
         return cursor.rowcount > 0
+
+def clear_all_holdings() -> int:
+    """Safely deletes all portfolio holdings without triggering re-seeding."""
+    init_db()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM portfolio_holdings")
+        conn.commit()
+        return cursor.rowcount
 
 def get_watchlist() -> List[WatchlistDB]:
     init_db()
@@ -303,6 +345,9 @@ async def upsert_holding_async(holding: PortfolioHoldingDB) -> PortfolioHoldingD
 async def delete_holding_async(ticker: str) -> bool:
     return await asyncio.to_thread(delete_holding, ticker)
 
+async def clear_all_holdings_async() -> int:
+    return await asyncio.to_thread(clear_all_holdings)
+
 async def get_watchlist_async() -> List[WatchlistDB]:
     return await asyncio.to_thread(get_watchlist)
 
@@ -317,4 +362,3 @@ async def save_memo_async(memo: DecisionMemoDB) -> DecisionMemoDB:
 
 async def get_memos_async(limit: int = 20) -> List[DecisionMemoDB]:
     return await asyncio.to_thread(get_memos, limit)
-

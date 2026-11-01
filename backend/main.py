@@ -28,11 +28,13 @@ from backend.personalization.portfolio import portfolio_service
 from backend.backtest.simulator import backtest_simulator
 from backend.observability.audit_logger import audit_logger
 from backend.database import (
+    init_db,
     get_user_profile_async as db_get_user_profile_async,
     upsert_user_profile_async as db_upsert_user_profile_async,
     get_all_holdings_async as db_get_all_holdings_async,
     upsert_holding_async as db_upsert_holding_async,
     delete_holding_async as db_delete_holding_async,
+    clear_all_holdings_async as db_clear_all_holdings_async,
     get_watchlist_async as db_get_watchlist_async,
     add_to_watchlist_async as db_add_to_watchlist_async,
     remove_from_watchlist_async as db_remove_from_watchlist_async,
@@ -52,7 +54,8 @@ def sanitize_ticker(ticker: str) -> str:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manages application lifecycle and gracefully closes async client pools."""
+    """Manages application lifecycle, initializes WAL DB, and gracefully closes async client pools."""
+    init_db()
     yield
     await llm_client.close()
 
@@ -133,15 +136,46 @@ class UploadDocumentRequest(BaseModel):
 
 @app.get("/api/health")
 async def get_health():
-    # Probe market data service status asynchronously without blocking event loop
-    sample_stock = await asyncio.to_thread(market_service.get_market_data, "NVDA")
-    is_live = sample_stock.get("feed_status") == "LIVE_YAHOO"
+    """
+    Lightweight, non-blocking liveness probe for orchestrators and container healthchecks.
+    Returns immediate status without blocking on external provider network latency.
+    """
     return {
         "status": "healthy",
         "version": "1.0.0",
-        "degraded_mode": not is_live,
-        "active_feed": "LIVE_YAHOO" if is_live else "STALE_FALLBACK_EOD",
+        "uptime": "online",
+        "service": "vibe-finance-api",
         "rag_corpus_documents": len(RAG_DOCUMENTS)
+    }
+
+@app.get("/api/ready")
+async def get_ready():
+    """
+    Deep readiness probe inspecting persistent SQLite WAL connectivity, vector index readiness,
+    and external Yahoo Finance live market feed status.
+    """
+    db_ok = False
+    try:
+        prof = await db_get_user_profile_async()
+        db_ok = prof is not None
+    except Exception:
+        pass
+
+    sample_stock = await asyncio.to_thread(market_service.get_market_data, "NVDA")
+    is_live = sample_stock.get("feed_status") == "LIVE_YAHOO"
+
+    return {
+        "status": "ready" if db_ok else "unhealthy",
+        "degraded_mode": not is_live,
+        "database": {"connected": db_ok, "engine": "sqlite_wal"},
+        "vector_store": {
+            "indexed_documents": len(RAG_DOCUMENTS),
+            "ready": len(RAG_DOCUMENTS) > 0
+        },
+        "market_feed": {
+            "active_feed": "LIVE_YAHOO" if is_live else "STALE_FALLBACK_EOD",
+            "is_live": is_live
+        }
     }
 
 @app.get("/api/stocks")
@@ -174,17 +208,28 @@ async def get_orchestrator_topology():
 async def stream_analysis(
     ticker: str,
     risk_level: Optional[str] = "conservative",
+    investment_horizon: Optional[str] = "medium",
+    panic_sell_tendency: Optional[float] = 0.8,
+    portfolio_cash: Optional[float] = 250000.0,
+    preferred_sectors: Optional[str] = None,
     simulated_stale_data: Optional[bool] = False,
     simulated_rag_timeout: Optional[bool] = False
 ):
     """
     Streams multi-agent state graph transitions, analyst findings, debate turns,
-    and final consensus synthesis via Server-Sent Events (SSE).
+    and final consensus synthesis via Server-Sent Events (SSE) preserving full user profile context.
     """
     safe_ticker = sanitize_ticker(ticker)
+    sectors = [s.strip() for s in preferred_sectors.split(",")] if preferred_sectors else ["Energy", "Tech"]
     initial_state = MultiAgentState(
         ticker=safe_ticker,
-        user_profile={"risk_level": risk_level or "conservative"},
+        user_profile={
+            "risk_level": risk_level or "conservative",
+            "investment_horizon": investment_horizon or "medium",
+            "panic_sell_tendency": float(panic_sell_tendency) if panic_sell_tendency is not None else 0.8,
+            "portfolio_cash": float(portfolio_cash) if portfolio_cash is not None else 250000.0,
+            "preferred_sectors": sectors
+        },
         simulated_stale_data=bool(simulated_stale_data),
         simulated_rag_timeout=bool(simulated_rag_timeout)
     )

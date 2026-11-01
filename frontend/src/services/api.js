@@ -7,7 +7,7 @@ import {
   MOCK_BACKTESTS,
 } from './mockData';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
 export async function checkSystemHealth() {
   try {
@@ -56,6 +56,10 @@ export async function streamMultiAgentAnalysis({
 }) {
   const queryParams = new URLSearchParams({
     risk_level: userProfile?.risk_level || 'conservative',
+    investment_horizon: userProfile?.investment_horizon || 'medium',
+    panic_sell_tendency: String(userProfile?.panic_sell_tendency ?? 0.8),
+    portfolio_cash: String(userProfile?.portfolio_cash ?? 250000),
+    preferred_sectors: (userProfile?.preferred_sectors || ['Energy', 'Tech']).join(','),
     simulated_stale_data: simulatedStaleData ? 'true' : 'false',
     simulated_rag_timeout: simulatedRagTimeout ? 'true' : 'false',
   });
