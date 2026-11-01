@@ -310,6 +310,15 @@ class BacktestSimulator:
             "quant_score_then": quant_score,
             "rag_score_then": rag_score,
             "was_profitable": was_profitable,
+            "is_fallback": False,
+            "status": "SUCCESS",
+            "provenance": {
+                "source": "YAHOO_FINANCE_HISTORICAL",
+                "is_live": True,
+                "as_of": actual_entry_date,
+                "exit_date": actual_exit_date,
+                "method": "point_in_time_walk_forward"
+            },
             "performance_metrics": {
                 "cagr_pct": cagr_pct,
                 "max_drawdown_pct": max_drawdown_pct,
@@ -333,7 +342,10 @@ class BacktestSimulator:
         }
 
     def _fallback_simulation(self, ticker: str, historical_date: str, holding_days: int) -> Dict[str, Any]:
-        """Deterministic offline fallback if historical series cannot be retrieved."""
+        """
+        Deterministic offline fallback when historical price series cannot be retrieved from Yahoo Finance.
+        Returns a neutral baseline with explicit fallback status and disclaimers to prevent deception.
+        """
         base_prices = {
             "NVDA": 135.0,
             "RELIANCE": 1200.0,
@@ -344,40 +356,45 @@ class BacktestSimulator:
             "HDFCBANK": 1700.0
         }
         entry = base_prices.get(ticker, 100.0)
-        return_pct = 6.5 if ticker in ["NVDA", "AAPL", "TCS", "HDFCBANK"] else 2.5
-        exit_p = round(entry * (1.0 + return_pct / 100.0), 2)
         return {
             "historical_date": historical_date,
             "exit_date": historical_date,
             "holding_days": holding_days,
-            "holding_days_actual": holding_days,
+            "holding_days_actual": 0,
             "entry_price": entry,
-            "exit_price": exit_p,
-            "actual_return_pct": return_pct,
-            "agent_recommendation_then": "BUY" if return_pct > 5 else "HOLD",
-            "quant_score_then": 70,
-            "rag_score_then": 65,
-            "was_profitable": True,
+            "exit_price": entry,
+            "actual_return_pct": 0.0,
+            "agent_recommendation_then": "INSUFFICIENT_DATA",
+            "quant_score_then": 50,
+            "rag_score_then": 50,
+            "was_profitable": False,
+            "is_fallback": True,
+            "status": "FALLBACK_INSUFFICIENT_HISTORY",
+            "provenance": {
+                "source": "OFFLINE_FALLBACK",
+                "is_live": False,
+                "disclaimer": f"Historical OHLCV data was unavailable for {ticker} on {historical_date}. Fallback baseline returned with zero fabricated alpha or returns."
+            },
             "performance_metrics": {
-                "cagr_pct": return_pct * (252.0 / holding_days),
-                "max_drawdown_pct": -4.2,
-                "sharpe_ratio": 1.45,
-                "sortino_ratio": 1.82,
-                "annualized_volatility_pct": 18.5,
+                "cagr_pct": 0.0,
+                "max_drawdown_pct": 0.0,
+                "sharpe_ratio": 0.0,
+                "sortino_ratio": 0.0,
+                "annualized_volatility_pct": 0.0,
                 "benchmark_name": "S&P 500" if ticker in ["NVDA", "AAPL", "TSLA"] else "NIFTY 50",
-                "benchmark_return_pct": 3.2,
-                "alpha_pct": return_pct - 3.2,
-                "win_rate_trajectory_pct": 72.0
+                "benchmark_return_pct": 0.0,
+                "alpha_pct": 0.0,
+                "win_rate_trajectory_pct": 0.0
             },
             "point_in_time_metrics": {
-                "rsi_14": 52.0,
-                "sma_50": round(entry * 0.98, 2),
-                "sma_200": round(entry * 0.94, 2),
-                "macd_hist": 1.5,
-                "volume_anomaly_ratio": 1.1
+                "rsi_14": 50.0,
+                "sma_50": round(entry, 2),
+                "sma_200": round(entry, 2),
+                "macd_hist": 0.0,
+                "volume_anomaly_ratio": 1.0
             },
             "trajectory": [],
-            "reasoning_snapshot": f"Offline historical simulation for {ticker} on {historical_date}."
+            "reasoning_snapshot": f"Historical OHLCV price series could not be retrieved from Yahoo Finance for {ticker} on {historical_date}. Fallback baseline returned with zero fabricated alpha or returns."
         }
 
 

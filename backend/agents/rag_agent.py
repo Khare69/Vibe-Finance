@@ -1,7 +1,6 @@
 import time
-import re
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from backend.rag.retriever import rag_retriever
 from backend.agents.llm_client import llm_client
@@ -9,13 +8,17 @@ from backend.agents.llm_client import llm_client
 
 class RAGAgent:
     """
-    Fundamental Researcher RAG Agent.
-    Retrieves vector citations from corporate filings and SEBI/SEC earnings call transcripts.
-    Dynamically extracts scores, stance, and grounded findings via LLM synthesis
-    or deterministic evidence weighting without hardcoded profile dictionaries.
+    Fundamental Researcher Agent.
+    Retrieves evidence from indexed corporate regulatory filings (SEC 10-K, 10-Q,
+    SEBI disclosures, earnings transcripts) and extracts grounded financial findings
+    using the Gemini LLM client with a deterministic TF-IDF sentiment fallback.
     """
 
     def analyze(self, ticker: str, simulated_rag_timeout: bool = False) -> Dict[str, Any]:
+        """
+        Synchronous interface for fundamental analysis.
+        Retrieves top vector citations and performs extraction.
+        """
         start_time = time.perf_counter()
         ticker_up = ticker.upper()
 
@@ -30,15 +33,19 @@ class RAGAgent:
                     "Fundamental RAG retrieval timed out after 5000ms threshold; fundamental analysis pending.",
                     "Proceeding with technical momentum and risk constraints only."
                 ],
-                "citations": []
+                "citations": [],
+                "provenance": {
+                    "source": "CIRCUIT_BREAKER_TIMEOUT",
+                    "corpus_citations": 0,
+                    "method": "circuit_breaker_abstention"
+                }
             }
 
-        # 1. Search Vector Knowledge Base for filings
+        # Search Vector Knowledge Base synchronously
         search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
         search_res = rag_retriever.search(ticker=ticker_up, query=search_query, top_k=3)
         citations = search_res.get("citations", [])
 
-        # If ticker is uncataloged and has no documents
         if not citations:
             elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
             return {
@@ -52,23 +59,18 @@ class RAGAgent:
                     "Fundamental score defaulted to neutral baseline pending corporate filing upload.",
                     "Upload 10-K/10-Q or earnings transcripts via the Ingestion panel to enable grounded research."
                 ],
-                "citations": []
+                "citations": [],
+                "provenance": {
+                    "source": "UNINDEXED_TICKER_BASELINE",
+                    "corpus_citations": 0,
+                    "method": "neutral_fallback"
+                }
             }
 
-        # 2. Attempt LLM-driven evidence extraction if Gemini is active
-        llm_analysis = llm_client.extract_fundamental_evidence(ticker=ticker_up, citations=citations)
-
-        if llm_analysis:
-            score = llm_analysis["score"]
-            stance = llm_analysis["stance"]
-            key_findings = llm_analysis["key_findings"]
-        else:
-            # 3. Deterministic Evidence Extraction Engine (Offline Fallback)
-            score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
-
+        # Deterministic extraction for synchronous calls
+        score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
 
-        # Format citations to adhere strictly to API_CONTRACTS with rich Evidence Explorer metadata
         formatted_citations = []
         for c in citations:
             formatted_citations.append({
@@ -95,7 +97,12 @@ class RAGAgent:
             "latency_ms": elapsed_ms,
             "timed_out": False,
             "key_findings": key_findings,
-            "citations": formatted_citations
+            "citations": formatted_citations,
+            "provenance": {
+                "source": "VECTOR_STORE_FILINGS",
+                "corpus_citations": len(formatted_citations),
+                "method": "tfidf_cosine_sentiment_weighting"
+            }
         }
 
     async def analyze_async(self, ticker: str, simulated_rag_timeout: bool = False) -> Dict[str, Any]:
@@ -117,7 +124,12 @@ class RAGAgent:
                     "Fundamental RAG retrieval timed out after 5000ms threshold; fundamental analysis pending.",
                     "Proceeding with technical momentum and risk constraints only."
                 ],
-                "citations": []
+                "citations": [],
+                "provenance": {
+                    "source": "CIRCUIT_BREAKER_TIMEOUT",
+                    "corpus_citations": 0,
+                    "method": "circuit_breaker_abstention"
+                }
             }
 
         # 1. Search Vector Knowledge Base non-blockingly via worker thread
@@ -139,12 +151,18 @@ class RAGAgent:
                     "Fundamental score defaulted to neutral baseline pending corporate filing upload.",
                     "Upload 10-K/10-Q or earnings transcripts via the Ingestion panel to enable grounded research."
                 ],
-                "citations": []
+                "citations": [],
+                "provenance": {
+                    "source": "UNINDEXED_TICKER_BASELINE",
+                    "corpus_citations": 0,
+                    "method": "neutral_fallback"
+                }
             }
 
         # 2. Asynchronous non-blocking LLM-driven evidence extraction
         llm_analysis = await llm_client.extract_fundamental_evidence_async(ticker=ticker_up, citations=citations)
 
+        extraction_method = "llm_evidence_extraction"
         if llm_analysis:
             score = llm_analysis["score"]
             stance = llm_analysis["stance"]
@@ -152,6 +170,7 @@ class RAGAgent:
         else:
             # 3. Deterministic Evidence Extraction Engine (Offline Fallback)
             score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
+            extraction_method = "tfidf_cosine_sentiment_weighting"
 
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
 
@@ -182,7 +201,12 @@ class RAGAgent:
             "latency_ms": elapsed_ms,
             "timed_out": False,
             "key_findings": key_findings,
-            "citations": formatted_citations
+            "citations": formatted_citations,
+            "provenance": {
+                "source": "VECTOR_STORE_FILINGS",
+                "corpus_citations": len(formatted_citations),
+                "method": extraction_method
+            }
         }
 
     def _extract_deterministic_evidence(

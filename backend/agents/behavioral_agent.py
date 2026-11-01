@@ -1,5 +1,5 @@
-import math
 import time
+import math
 import asyncio
 from typing import Dict, Any, List
 
@@ -7,75 +7,80 @@ from typing import Dict, Any, List
 class BehavioralAgent:
     """
     Behavioral Risk Manager Agent.
-    Evaluates individual investor psychology, panic selling propensity,
-    risk capacity, and downweights speculative momentum to protect capital.
+    Evaluates retail psychological vulnerabilities, panic selling propensities,
+    historical drawdown tolerances, and portfolio concentration risks.
+    Uses institutional square-root-of-time volatility scaling and 95% 1-week VaR.
     """
 
-    TOLERABLE_DRAWDOWN = {
-        "conservative": 0.08,
-        "moderate": 0.15,
-        "aggressive": 0.28
-    }
-
     STOCK_VOLATILITIES = {
-        "RELIANCE": 0.22,
-        "TCS": 0.18,
-        "INFY": 0.24,
-        "HDFCBANK": 0.19,
-        "NVDA": 0.44,
-        "AAPL": 0.21,
-        "TSLA": 0.52
+        "TSLA": 52.0,
+        "NVDA": 46.0,
+        "RELIANCE": 22.0,
+        "TCS": 18.0,
+        "INFY": 24.0,
+        "AAPL": 21.0,
+        "HDFCBANK": 19.5
     }
 
     def analyze(self, ticker: str, user_profile: Dict[str, Any], market_data: Dict[str, Any]) -> Dict[str, Any]:
         start_time = time.perf_counter()
         risk_level = user_profile.get("risk_level", "moderate").lower()
-        panic_tendency = float(user_profile.get("panic_sell_tendency", 0.5))
-        horizon = user_profile.get("investment_horizon", "medium").lower()
+        panic_tendency = float(user_profile.get("panic_tendency", 0.4))
+        loss_tolerance_pct = float(user_profile.get("loss_tolerance_pct", 15.0))
 
-        # Volatility: use live computed volatility from market_data if available, otherwise baseline
         ticker_up = ticker.upper()
-        annual_vol = float(
-            market_data.get("annualized_volatility")
-            or self.STOCK_VOLATILITIES.get(ticker_up, 0.25)
-        )
 
-        # Standard quantitative square-root-of-time scaling:
-        # Weekly volatility = annual_vol / sqrt(52)
-        # Approximate 95% 1-week Value-at-Risk (VaR) = 1.65 * weekly_vol
+        # Prioritize live computed annualized volatility if available in market_data
+        if "annualized_volatility" in market_data and market_data["annualized_volatility"] is not None:
+            # market_data annualized_volatility is in decimal form (e.g. 0.22)
+            annual_vol = round(float(market_data["annualized_volatility"]) * 100.0, 1)
+        else:
+            annual_vol = self.STOCK_VOLATILITIES.get(ticker_up, 28.0)
+
+        # Standard square-root-of-time scaling: weekly_vol = annual_vol / sqrt(52)
+        # 95% 1-week Value-at-Risk (Parametric Normal approximation: 1.65 * sigma_weekly)
         weekly_vol = annual_vol / math.sqrt(52.0)
-        weekly_drawdown_risk = round(1.65 * weekly_vol, 4)
+        weekly_drawdown_risk = round(1.65 * weekly_vol, 1)
 
-        max_tolerable = self.TOLERABLE_DRAWDOWN.get(risk_level, 0.15)
         adjustments: List[str] = []
-
-        # Behavioral adjustment checks
-        if panic_tendency >= 0.7:
-            adjustments.append(f"User has high panic-sell score ({panic_tendency:.2f}). Down-weighting breakout momentum.")
-        elif panic_tendency <= 0.3:
-            adjustments.append(f"User exhibits high emotional discipline (panic-sell score {panic_tendency:.2f}). Allowing normal risk budget.")
-
-        if weekly_drawdown_risk > max_tolerable:
-            adjustments.append(
-                f"Estimated 1-week 95% downside volatility of {round(weekly_drawdown_risk * 100, 1)}% exceeds user's stated max tolerable weekly drawdown (-{int(max_tolerable * 100)}%)."
-            )
-        else:
-            adjustments.append(
-                f"Estimated 1-week 95% downside volatility of {round(weekly_drawdown_risk * 100, 1)}% remains within user's tolerable risk threshold ({int(max_tolerable * 100)}%)."
-            )
-
-        # Conditional staging advice
-        if horizon == "short" and annual_vol > 0.30:
-            adjustments.append("Short horizon combined with high volatility increases sequence-of-returns risk.")
-        elif panic_tendency >= 0.6 or annual_vol > 0.35:
-            adjustments.append("Suggesting staggered SIP / staged accumulation rather than lump-sum entry to mitigate volatility shock.")
-        else:
-            adjustments.append("Lump-sum or systematic entry permitted within volatility budget.")
-
-        # Behavioral score calculation
         base_score = 65
+
+        # Maximum tolerable 1-week drawdown by risk tier
         if risk_level == "conservative":
-            base_score -= 15
+            max_tolerable = 8.0
+            if weekly_drawdown_risk > max_tolerable:
+                adjustments.append(
+                    f"Asset 1-week 95% drawdown risk ({weekly_drawdown_risk}%) exceeds conservative cap ({max_tolerable}%). "
+                    f"Trim single-position sizing to <5% of total portfolio."
+                )
+        elif risk_level == "moderate":
+            max_tolerable = 14.0
+            if weekly_drawdown_risk > max_tolerable:
+                adjustments.append(
+                    f"Asset 1-week 95% drawdown risk ({weekly_drawdown_risk}%) exceeds moderate risk band ({max_tolerable}%). "
+                    f"Implement strict trailing stop-loss."
+                )
+        else:
+            max_tolerable = 20.0
+            if weekly_drawdown_risk > max_tolerable:
+                adjustments.append(
+                    f"High-beta tail-risk profile ({weekly_drawdown_risk}% 1-week 95% VaR). Ensure portfolio rebalancing buffers are active."
+                )
+
+        if panic_tendency >= 0.6:
+            adjustments.append(
+                f"Elevated retail panic sensitivity detected ({int(panic_tendency * 100)}%). "
+                f"Recommend pre-committing to automated rule-based limit orders."
+            )
+
+        # Staggered entry recommendations only trigger on genuinely volatile assets (>30% annual vol) or high panic tendency
+        if annual_vol > 30.0 or panic_tendency >= 0.6:
+            adjustments.append(
+                f"High asset volatility ({annual_vol}% annualized). Allocate capital in 3 staggered SIP tranches over 60 days."
+            )
+
+        if risk_level == "conservative":
+            base_score -= 10
         elif risk_level == "aggressive":
             base_score += 15
 
@@ -104,7 +109,12 @@ class BehavioralAgent:
             "user_risk_profile": risk_level,
             "annualized_volatility": annual_vol,
             "weekly_95_var": weekly_drawdown_risk,
-            "behavioral_adjustments": adjustments
+            "behavioral_adjustments": adjustments,
+            "provenance": {
+                "source": "PARAMETRIC_VAR_SCALING",
+                "method": "square_root_of_time_95_var",
+                "volatility_source": "live_market_data" if "annualized_volatility" in market_data else "catalog_baseline"
+            }
         }
 
     async def analyze_async(self, ticker: str, user_profile: Dict[str, Any], market_data: Dict[str, Any]) -> Dict[str, Any]:

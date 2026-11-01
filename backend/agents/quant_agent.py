@@ -87,6 +87,11 @@ class QuantAgent:
                 "macd": macd,
                 "volume_anomaly_ratio": round(vol_ratio, 2),
                 "momentum_score": quant_score
+            },
+            "provenance": {
+                "source": market_data.get("feed_status", "LIVE_YAHOO"),
+                "as_of": market_data.get("as_of", "RECENT"),
+                "method": "deterministic_technical_factors"
             }
         }
 

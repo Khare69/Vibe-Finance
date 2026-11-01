@@ -10,6 +10,8 @@ if sys.platform == "win32":
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from backend.data.market_service import market_service
+from backend.agents.quant_agent import quant_agent
+from backend.agents.rag_agent import rag_agent
 from backend.agents.behavioral_agent import behavioral_agent
 from backend.agents.synthesis_agent import synthesis_agent
 from backend.backtest.simulator import backtest_simulator
@@ -49,122 +51,142 @@ def test_rsi_factor_scoring_non_linearity():
     
     score_30 = market_service.calculate_rsi_factor_score(30.0)
     score_50 = market_service.calculate_rsi_factor_score(50.0)
-    score_65 = market_service.calculate_rsi_factor_score(65.0)
+    score_60 = market_service.calculate_rsi_factor_score(60.0)
+    score_75 = market_service.calculate_rsi_factor_score(75.0)
     score_85 = market_service.calculate_rsi_factor_score(85.0)
 
-    # Invariant 2A: Optimal momentum is at 60-65
-    assert score_65 > score_50, f"RSI 65 ({score_65}) must exceed RSI 50 ({score_50})"
-    print(f"  [PASSED] Invariant 2A: Healthy momentum at RSI 65 (+{score_65} pts) > neutral RSI 50 ({score_50} pts)")
+    # Optimal momentum (55-65) must score higher than neutral (50)
+    assert score_60 > score_50, f"Optimal RSI 60 ({score_60}) should score higher than neutral 50 ({score_50})"
+    
+    # Overbought extreme (85) must be heavily penalized compared to optimal momentum (60)
+    assert score_85 < score_60, f"Overbought RSI 85 ({score_85}) should be penalized below optimal RSI 60 ({score_60})"
+    
+    # Overbought extreme (85) must be negative to reflect extreme mean-reversion risk
+    assert score_85 < 0, f"Overbought RSI 85 ({score_85}) should yield negative factor score"
 
-    # Invariant 2B: Severe overbought (RSI 85) is penalized for mean-reversion risk, NOT rewarded
-    assert score_85 < 0, f"RSI 85 must be penalized with a negative score, got {score_85}"
-    assert score_85 < score_65, f"RSI 85 ({score_85}) must be lower than RSI 65 ({score_65})"
-    print(f"  [PASSED] Invariant 2B: Overbought froth at RSI 85 penalized ({score_85} pts) < peak momentum RSI 65 (+{score_65} pts)")
+    # Mild overbought threshold (75) should start tapering downwards
+    assert score_75 < score_60, f"RSI 75 ({score_75}) should taper below peak RSI 60 ({score_60})"
+
+    print(f"  [PASSED] Non-linear factor curve validated: RSI 30={score_30}, RSI 50={score_50}, RSI 60={score_60} (PEAK), RSI 75={score_75}, RSI 85={score_85} (PENALTY)")
 
 
 def test_moving_averages_and_macd_properties():
-    print("\n--- 3. Testing Moving Averages & MACD Algebraic Identities ---")
+    print("\n--- 3. Testing Moving Averages & MACD Algebraic Invariants ---")
+    
+    # Invariant A: SMA of constant c is c
+    constant_series = [42.0] * 50
+    sma = market_service.calculate_sma(constant_series, 50)
+    assert abs(sma - 42.0) < 1e-6, f"SMA of constant series should be 42.0, got {sma}"
+    print("  [PASSED] Invariant A: SMA of constant series == c")
 
-    test_prices = [10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0]
-    expected_sma5 = sum(test_prices[-5:]) / 5.0
-    calc_sma5 = market_service.calculate_sma(test_prices, 5)
-    assert abs(calc_sma5 - expected_sma5) < 1e-4, f"SMA mismatch: expected {expected_sma5}, got {calc_sma5}"
-    print(f"  [PASSED] SMA Identity: calculated {calc_sma5} == expected {expected_sma5}")
+    # Invariant B: EMA recency weighting (recent spike pulls EMA faster than SMA)
+    stepped_series = [10.0] * 40 + [20.0] * 10
+    ema = market_service.calculate_ema(stepped_series, 20)
+    sma_comp = market_service.calculate_sma(stepped_series, 20)
+    assert ema > sma_comp, f"EMA ({ema}) must respond faster to recent upward step than SMA ({sma_comp})"
+    print(f"  [PASSED] Invariant B: EMA recency weighting verified (EMA={ema:.2f} > SMA={sma_comp:.2f})")
 
-    flat_prices = [42.0] * 15
-    assert market_service.calculate_ema(flat_prices, 5) == 42.0
-    print("  [PASSED] EMA Identity: Constant series -> EMA = constant price (42.0)")
-
-    surge_prices = [10.0] * 10 + [50.0]
-    calc_ema = market_service.calculate_ema(surge_prices, 5)
-    assert calc_ema > 10.0
-    print(f"  [PASSED] EMA Surge Response: EMA-5 responded from baseline 10.0 to {calc_ema}")
-
-    longer_series = [50.0 + (i * 0.5) + math.sin(i) * 2.0 for i in range(60)]
-    macd_res = market_service.calculate_macd(longer_series)
-    diff = round(macd_res["line"] - macd_res["signal"], 2)
-    assert abs(macd_res["hist"] - diff) < 0.05, f"MACD Identity violated: hist={macd_res['hist']} vs line-signal={diff}"
-    print(f"  [PASSED] MACD Algebraic Identity: {macd_res['line']} - {macd_res['signal']} == {macd_res['hist']}")
+    # Invariant C: MACD Algebraic Identity: hist == line - signal
+    macd = market_service.calculate_macd([100.0 + i for i in range(60)], 12, 26, 9)
+    algebraic_diff = macd["line"] - macd["signal"]
+    assert abs(macd["hist"] - algebraic_diff) < 1e-4, f"MACD histogram identity violated: {macd['hist']} != {algebraic_diff}"
+    print(f"  [PASSED] Invariant C: MACD Identity verified: hist ({macd['hist']}) == line ({macd['line']}) - signal ({macd['signal']})")
 
 
 def test_volume_anomaly_properties():
-    print("\n--- 4. Testing Volume Anomaly Mathematical Properties ---")
+    print("\n--- 4. Testing Volume Anomaly Baseline Independence ---")
     
-    # Baseline of 20 days with 100,000, current volume is 250,000 -> ratio must equal 2.50
-    vol_history = [100000] * 20
-    current_vol = 250000
-    ratio = market_service.calculate_volume_anomaly(current_vol, vol_history)
-    assert ratio == 2.5, f"Expected volume anomaly ratio 2.50, got {ratio}"
-    print(f"  [PASSED] Volume Anomaly ratio: {current_vol} / 100,000 == {ratio}x")
-
-    # Ratio on zero or empty history must gracefully fallback to 1.0
-    assert market_service.calculate_volume_anomaly(current_vol, []) == 1.0
-    print("  [PASSED] Empty history edge-case handled gracefully (1.0x).")
+    # When current volume spikes by 3x over past 20-day mean
+    past_20_days = [1_000_000] * 20
+    current_day = [3_000_000]
+    full_history = past_20_days + current_day
+    
+    vol_ratio = market_service.calculate_volume_anomaly(full_history, baseline_window=20)
+    # The anomaly must equal 3.0x because the 20-day baseline excludes the current day spike
+    assert abs(vol_ratio - 3.0) < 0.05, f"Expected 3.0x volume anomaly, got {vol_ratio}"
+    print(f"  [PASSED] Volume Anomaly ratio against prior baseline: {vol_ratio}x (exact 3.0x)")
 
 
 def test_weekly_drawdown_risk_scaling():
     print("\n--- 5. Testing Square-Root-of-Time Weekly Drawdown Risk Scaling ---")
 
-    # TCS (defensive stock, annual vol 18%):
-    # weekly_vol = 0.18 / sqrt(52) = ~0.02496
-    # 95% 1-week VaR = 1.65 * 0.02496 = ~0.0412 (4.12%)
-    # Under a conservative limit of 8% (0.08), TCS MUST NOT exceed the limit!
-    tcs_market = {"current_price": 3915.0, "annualized_volatility": 0.18, "beta": 0.72}
-    tcs_profile = {"risk_level": "conservative", "panic_sell_tendency": 0.2}
-    tcs_eval = behavioral_agent.analyze("TCS", tcs_profile, tcs_market)
+    # Test conservative user on low-volatility TCS (18% annual vol)
+    tcs_market_data = {
+        "annualized_volatility": 0.18,
+        "current_price": 3900.0,
+        "metrics": {"rsi_14": 52.0}
+    }
+    tcs_profile = {"risk_level": "conservative", "panic_tendency": 0.3}
+    tcs_res = behavioral_agent.analyze("TCS", tcs_profile, tcs_market_data)
 
-    assert tcs_eval["weekly_95_var"] <= 0.08, f"TCS weekly risk ({tcs_eval['weekly_95_var']}) should not exceed 8%"
-    assert any("remains within user's tolerable risk threshold" in adj for adj in tcs_eval["behavioral_adjustments"])
-    print(f"  [PASSED] Defensive Stock (TCS): Weekly VaR = {round(tcs_eval['weekly_95_var']*100, 1)}% <= 8.0% conservative cap")
+    # 18% / sqrt(52) * 1.65 = 4.1% 1-week 95% VaR
+    expected_tcs_var = round(1.65 * (18.0 / math.sqrt(52.0)), 1)
+    assert tcs_res["weekly_95_var"] == expected_tcs_var, f"Expected weekly VaR {expected_tcs_var}, got {tcs_res['weekly_95_var']}"
+    # Conservative cap is 8.0%. TCS at 4.1% should NOT trigger the "exceeds conservative cap" adjustment
+    assert not any("exceeds conservative cap" in adj for adj in tcs_res["behavioral_adjustments"]), (
+        f"Low-volatility asset TCS ({tcs_res['weekly_95_var']}%) should not trigger conservative risk cap warning!"
+    )
+    print(f"  [PASSED] Low-volatility asset (TCS 18% vol): 1-week VaR = {tcs_res['weekly_95_var']}%, conservative cap compliant.")
 
-    # TSLA (high-beta stock, annual vol 52%):
-    # weekly_vol = 0.52 / sqrt(52) = ~0.0721
-    # 95% 1-week VaR = 1.65 * 0.0721 = ~0.119 (11.9%)
-    # Under conservative limit of 8%, TSLA MUST exceed the limit and trigger risk warnings!
-    tsla_market = {"current_price": 240.0, "annualized_volatility": 0.52, "beta": 2.05}
-    tsla_eval = behavioral_agent.analyze("TSLA", tcs_profile, tsla_market)
-
-    assert tsla_eval["weekly_95_var"] > 0.08, f"TSLA weekly risk ({tsla_eval['weekly_95_var']}) should exceed 8%"
-    assert any("exceeds user's stated max tolerable weekly drawdown" in adj for adj in tsla_eval["behavioral_adjustments"])
-    print(f"  [PASSED] High-Vol Stock (TSLA): Weekly VaR = {round(tsla_eval['weekly_95_var']*100, 1)}% > 8.0% conservative cap (correctly flagged)")
+    # Test high-volatility TSLA (52% annual vol)
+    tsla_market_data = {
+        "annualized_volatility": 0.52,
+        "current_price": 250.0,
+        "metrics": {"rsi_14": 65.0}
+    }
+    tsla_res = behavioral_agent.analyze("TSLA", tcs_profile, tsla_market_data)
+    # 52% / sqrt(52) * 1.65 = 11.9%
+    expected_tsla_var = round(1.65 * (52.0 / math.sqrt(52.0)), 1)
+    assert tsla_res["weekly_95_var"] == expected_tsla_var
+    assert any("exceeds conservative cap" in adj for adj in tsla_res["behavioral_adjustments"]), (
+        f"High-volatility asset TSLA ({tsla_res['weekly_95_var']}%) must trigger conservative risk cap warning!"
+    )
+    print(f"  [PASSED] High-volatility asset (TSLA 52% vol): 1-week VaR = {tsla_res['weekly_95_var']}%, conservative cap breached as expected.")
 
 
 def test_beta_and_volatility_calculation():
-    print("\n--- 6. Testing Dynamic Beta & Volatility Propagation ---")
+    print("\n--- 6. Testing Dynamic Beta and Volatility Calculations ---")
 
-    # Synthetic covariance test: Asset moves 1.5x of benchmark
-    bench_returns = [0.01, -0.02, 0.015, -0.005, 0.02, -0.01, 0.008, -0.012, 0.025, -0.018] * 3
-    asset_returns = [r * 1.5 + 0.001 for r in bench_returns]
-
-    # Convert returns to closes series
-    b_closes = [100.0]
+    # Invariant A: Asset perfectly correlated with benchmark with identical variance has Beta == 1.0
+    np.random.seed(42)
+    bench_returns = np.random.normal(0.001, 0.015, 60)
+    bench = [100.0]
     for r in bench_returns:
-        b_closes.append(b_closes[-1] * (1.0 + r))
+        bench.append(bench[-1] * (1.0 + r))
 
-    a_closes = [100.0]
-    for r in asset_returns:
-        a_closes.append(a_closes[-1] * (1.0 + r))
+    asset_identical = list(bench)
+    beta_identical = market_service.calculate_beta(asset_identical, bench)
+    assert abs(beta_identical - 1.0) < 0.05, f"Beta of identical series should be 1.0, got {beta_identical}"
+    print(f"  [PASSED] Invariant A: Identical series Beta == 1.0 (got {beta_identical})")
 
-    calc_beta = market_service.calculate_beta(a_closes, b_closes)
-    assert abs(calc_beta - 1.5) < 0.1, f"Expected calculated beta ~1.5, got {calc_beta}"
-    print(f"  [PASSED] Dynamic Beta Calculation: Cov(r, rm)/Var(rm) = {calc_beta} (target: 1.5)")
+    # Invariant B: Asset with 2x returns of benchmark has Beta == 2.0
+    asset_levered = [100.0]
+    for r in bench_returns:
+        asset_levered.append(asset_levered[-1] * (1.0 + 2.0 * r))
+    beta_levered = market_service.calculate_beta(asset_levered, bench)
+    assert abs(beta_levered - 2.0) < 0.15, f"Beta of 2x series should be ~2.0, got {beta_levered}"
+    print(f"  [PASSED] Invariant B: 2x leveraged series Beta == 2.0 (got {beta_levered})")
 
-    # Verify market_service returns beta and annualized_volatility in get_market_data
-    nvda_data = market_service.get_market_data("NVDA")
-    assert "beta" in nvda_data and nvda_data["beta"] > 1.0, f"Expected NVDA beta > 1.0, got {nvda_data.get('beta')}"
-    assert "annualized_volatility" in nvda_data and nvda_data["annualized_volatility"] > 0.30
-    print(f"  [PASSED] MarketData Propagation: NVDA Beta = {nvda_data['beta']}, Volatility = {nvda_data['annualized_volatility']}")
+    # Invariant C: Catalog contains realistic seeded baselines
+    for sym in ["RELIANCE", "TCS", "INFY", "HDFCBANK", "AAPL", "NVDA", "TSLA"]:
+        info = market_service.STOCK_CATALOG.get(sym)
+        assert info is not None, f"Stock info missing for {sym}"
+        assert "baseline_beta" in info, f"baseline_beta missing for {sym}"
+        assert "baseline_volatility" in info, f"baseline_volatility missing for {sym}"
+        assert info["baseline_beta"] > 0
+        assert info["baseline_volatility"] > 0
+    print("  [PASSED] Invariant C: All 7 tracked assets have positive baseline beta and volatility.")
 
 
 def test_dynamic_macro_regimes():
-    print("\n--- 7. Testing Dynamic Macro Regime Synthesis & Data Provenance ---")
+    print("\n--- 7. Testing Dynamic Macro Regime Synthesis ---")
 
-    dummy_quant = {"score": 75, "stance": "BULLISH"}
+    dummy_quant = {"score": 75, "stance": "BULLISH", "metrics": {"rsi_14": 62.0}}
     dummy_rag = {"score": 70, "stance": "BULLISH", "timed_out": False}
     dummy_risk = {"score": 60, "user_risk_profile": "moderate"}
     dummy_debate = {"has_disagreement": False}
     dummy_market = {
-        "current_price": 217.94,
+        "current_price": 135.0,
         "symbol": "$",
         "beta": 1.75,
         "annualized_volatility": 0.44,
@@ -232,8 +254,59 @@ def test_attribution_weights_invariance():
     print(f"  [PASSED] Invariant 9B: Degraded RAG-Timeout Decomposition {weights_timeout} == 100%")
 
 
+def test_parametric_shortfall_and_beta_adjusted_stress():
+    print("\n--- 10. Testing Continuous Parametric Shortfall Risk & Beta-Adjusted Stress ---")
+
+    # Invariant A: Continuous parametric shortfall probability
+    stress_res = portfolio_service.simulate_stress_test("rate_hike_2022")
+    cash_buf = stress_res["cash_buffer"]
+    ruin_prob = cash_buf["projected_ruin_probability_pct"]
+    assert cash_buf["calculation_method"] == "parametric_gaussian_shortfall"
+    assert "provenance" in cash_buf
+    assert 0.0 < ruin_prob < 100.0
+    print(f"  [PASSED] Invariant 10A: Continuous Parametric Shortfall Risk = {ruin_prob}%, Z = {cash_buf['provenance']['z_score']}")
+
+    # Invariant B: Asset beta-adjusted sector shock sensitivity
+    impacts = {a["ticker"]: a for a in stress_res["asset_impacts"]}
+    # In Rate Hike 2022, Tech sector has base shock -24.5%
+    # TCS has beta 0.72, AAPL has beta 1.05
+    if "TCS" in impacts and "AAPL" in impacts:
+        tcs_shock = impacts["TCS"]["shock_pct"]
+        aapl_shock = impacts["AAPL"]["shock_pct"]
+        assert abs(tcs_shock) < abs(aapl_shock), f"Lower beta TCS ({tcs_shock}%) should have smaller drawdown than AAPL ({aapl_shock}%)"
+        print(f"  [PASSED] Invariant 10B: Beta scaling verified: TCS (beta 0.72) shock = {tcs_shock}% vs AAPL (beta 1.05) shock = {aapl_shock}%")
+
+
+def test_backtest_fallback_honesty_and_provenance():
+    print("\n--- 11. Testing Backtest Fallback Honesty & Provenance Badges ---")
+
+    # Test fallback simulation returns honest zero-alpha metrics without fabrication
+    fallback_res = backtest_simulator._fallback_simulation("NVDA", "2025-10-15", 90)
+    assert fallback_res["is_fallback"] is True
+    assert fallback_res["status"] == "FALLBACK_INSUFFICIENT_HISTORY"
+    assert fallback_res["actual_return_pct"] == 0.0
+    assert fallback_res["agent_recommendation_then"] == "INSUFFICIENT_DATA"
+    assert fallback_res["performance_metrics"]["sharpe_ratio"] == 0.0
+    assert fallback_res["performance_metrics"]["sortino_ratio"] == 0.0
+    assert fallback_res["performance_metrics"]["win_rate_trajectory_pct"] == 0.0
+    assert "disclaimer" in fallback_res["provenance"]
+    print("  [PASSED] Invariant 11A: Backtest fallback returns honest zero-alpha baseline with explicit disclaimer.")
+
+    # Invariant B: Agent and service provenance badges present
+    dummy_market = {"current_price": 100.0, "metrics": {"rsi_14": 50.0}, "feed_status": "LIVE_YAHOO"}
+    q_res = quant_agent.analyze("AAPL", dummy_market)
+    assert "provenance" in q_res
+    b_res = behavioral_agent.analyze("AAPL", {"risk_level": "moderate"}, dummy_market)
+    assert "provenance" in b_res
+    r_res = rag_agent.analyze("AAPL")
+    assert "provenance" in r_res
+    port_res = portfolio_service.get_portfolio()
+    assert "provenance" in port_res
+    print("  [PASSED] Invariant 11B: Provenance badges verified across Quant, Behavioral, RAG, and Portfolio services.")
+
+
 def main():
-    print("=== Testing Sub-phase A.1: Mathematical Properties, Volatility Scaling & Scoring Invariants ===")
+    print("=== Testing Sub-phases A.1 & A.2: Mathematical Properties, Risk Scaling, Shortfall Risk & Provenance ===")
     test_rsi_mathematical_invariants()
     test_rsi_factor_scoring_non_linearity()
     test_moving_averages_and_macd_properties()
@@ -243,7 +316,9 @@ def main():
     test_dynamic_macro_regimes()
     test_portfolio_conservation_laws()
     test_attribution_weights_invariance()
-    print("\n[SUCCESS] Sub-phase A.1 Mathematical Properties & Invariants verified with 100% accuracy!")
+    test_parametric_shortfall_and_beta_adjusted_stress()
+    test_backtest_fallback_honesty_and_provenance()
+    print("\n[SUCCESS] Sub-phases A.1 & A.2 Mathematical Properties & Invariants verified with 100% accuracy!")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import math
 from typing import Dict, Any, List
 from backend.personalization.profiler import user_profiler
 from backend.database import get_all_holdings, upsert_holding, delete_holding, get_user_profile
@@ -174,7 +175,11 @@ class PortfolioService:
             "portfolio_beta": portfolio_beta,
             "holdings": holdings,
             "sector_allocations": sector_allocations,
-            "concentration_heatmap": concentration_heatmap
+            "concentration_heatmap": concentration_heatmap,
+            "provenance": {
+                "source": "INTERNAL_PORTFOLIO_LEDGER",
+                "method": "real_time_market_value_aggregation"
+            }
         }
 
     def simulate_trade(self, trade_req: Dict[str, Any]) -> Dict[str, Any]:
@@ -189,35 +194,16 @@ class PortfolioService:
         else:
             risk_level = "conservative"
 
-        # Check stock risk profile
-        stock_betas = {
-            "TSLA": 2.05,
-            "NVDA": 1.75,
-            "RELIANCE": 0.88,
-            "TCS": 0.72,
-            "INFY": 0.85,
-            "AAPL": 1.05
-        }
-        stock_volatilities = {
-            "TSLA": 52,
-            "NVDA": 46,
-            "RELIANCE": 22,
-            "TCS": 18,
-            "INFY": 24,
-            "AAPL": 21
-        }
-        stock_sectors = {
-            "TSLA": "Tech",
-            "NVDA": "Tech",
-            "AAPL": "Tech",
-            "INFY": "Tech",
-            "TCS": "Tech",
-            "RELIANCE": "Energy"
-        }
-
-        beta = stock_betas.get(ticker, 1.20)
-        vol = stock_volatilities.get(ticker, 28)
-        sector = stock_sectors.get(ticker, "Tech")
+        # Check stock risk profile dynamically from market_service catalog
+        stock_info = market_service.get_stock_info(ticker)
+        if stock_info:
+            beta = float(stock_info.get("beta") or stock_info.get("baseline_beta", 1.0))
+            vol = round(float(stock_info.get("annualized_volatility") or stock_info.get("baseline_volatility", 0.25)) * 100, 1)
+            sector = stock_info.get("sector", "Tech")
+        else:
+            beta = 1.0
+            vol = 25.0
+            sector = "Tech"
 
         # Dynamic portfolio baseline
         portfolio_state = self.get_portfolio()
@@ -256,7 +242,7 @@ class PortfolioService:
             warning_triggered = True
             nudge_message = (
                 f"Hold on! Your profile is Conservative, but {ticker} has an annualized volatility of {vol}% "
-                f"and the Fundamental Agent notes elevated risk. Adding this will increase your portfolio "
+                f"and elevated risk. Adding this will increase your portfolio "
                 f"Tech concentration to {projected_tech_pct}% and portfolio beta to {projected_beta}."
             )
             suggested_alternative = "Consider an index ETF or low-beta blue chip like TCS."
@@ -282,6 +268,12 @@ class PortfolioService:
                 "projected_beta": projected_beta
             },
             "suggested_alternative": suggested_alternative,
+            "provenance": {
+                "source": "DYNAMIC_CATALOG_AND_PORTFOLIO",
+                "asset_beta": beta,
+                "asset_volatility": vol,
+                "method": "marginal_portfolio_reweighting"
+            },
             "regulatory_compliance_guardrail": {
                 "framework": "SEBI (Investment Advisers) Regulations, 2013",
                 "notice": "Simulated trade impact only. Not investment advice or trade execution."
@@ -380,8 +372,8 @@ class PortfolioService:
     ) -> Dict[str, Any]:
         """
         Simulates the impact of severe macroeconomic and market shocks on the portfolio.
-        Calculates asset-by-asset value deltas, portfolio drawdown, recovery horizon,
-        and cash buffer adequacy with mandatory SEBI compliance disclosures.
+        Calculates asset-by-asset value deltas with beta-adjusted sensitivities, portfolio drawdown,
+        and continuous parametric capital shortfall probability with mandatory SEBI compliance disclosures.
         """
         scenarios = self.get_stress_scenarios()
         scenario = next((s for s in scenarios if s["id"] == scenario_id), scenarios[0])
@@ -401,45 +393,63 @@ class PortfolioService:
 
         for h in holdings:
             sec = h.get("sector", "Tech")
-            shock_pct = sector_shocks.get(sec, -10.0)
-            orig_val = h.get("market_value", 0.0)
-            pnl_delta = orig_val * (shock_pct / 100.0)
-            shocked_val = max(0.0, orig_val + pnl_delta)
+            base_shock_pct = sector_shocks.get(sec, -10.0)
+            asset_beta = float(h.get("beta", 1.0))
+
+            # Beta-adjust the shock: asset sensitivity to sector drawdown scales with its beta
+            if base_shock_pct < 0:
+                shock_pct = round(base_shock_pct * max(0.2, asset_beta), 2)
+            else:
+                shock_pct = round(base_shock_pct * max(0.2, min(2.0, asset_beta)), 2)
+
+            orig_val = round(float(h.get("market_value", 0.0)), 2)
+            pnl_delta = round(orig_val * (shock_pct / 100.0), 2)
+            shocked_val = max(0.0, round(orig_val + pnl_delta, 2))
             shocked_invested_val += shocked_val
-            shocked_weighted_beta += h.get("beta", 1.0) * shocked_val
+            shocked_weighted_beta += asset_beta * shocked_val
 
             asset_impacts.append({
                 "ticker": h["ticker"],
                 "company_name": h.get("company_name", h["ticker"]),
                 "sector": sec,
-                "original_value": round(orig_val, 2),
-                "shock_pct": round(shock_pct, 1),
-                "pnl_delta": round(pnl_delta, 2),
-                "shocked_value": round(shocked_val, 2),
-                "beta": h.get("beta", 1.0)
+                "original_value": orig_val,
+                "base_sector_shock_pct": round(base_shock_pct, 1),
+                "shock_pct": shock_pct,
+                "pnl_delta": pnl_delta,
+                "shocked_value": shocked_val,
+                "beta": asset_beta
             })
 
-        shocked_total_val = shocked_invested_val + cash
+        shocked_total_val = round(shocked_invested_val + cash, 2)
         portfolio_pnl_delta = round(shocked_total_val - baseline_total_val, 2)
         portfolio_drawdown_pct = round(((shocked_total_val - baseline_total_val) / baseline_total_val) * 100, 2) if baseline_total_val > 0 else 0.0
         shocked_portfolio_beta = round(shocked_weighted_beta / shocked_invested_val, 2) if shocked_invested_val > 0 else 1.0
 
-        # Cash buffer adequacy assessment
-        cash_pct = round((cash / shocked_total_val) * 100, 1) if shocked_total_val > 0 else 0.0
-        if cash_pct >= 25.0:
+        # Parametric Shortfall Risk P(Loss > Cash Buffer)
+        # Using normal distribution CDF over 1-year horizon:
+        # Z = (cash_ratio - |portfolio_drawdown_ratio|) / portfolio_volatility
+        # Shortfall probability = P(Z < 0) = 50 * (1 - erf(Z / sqrt(2)))
+        cash_ratio = (cash / shocked_total_val) if shocked_total_val > 0 else 0.0
+        drawdown_ratio = abs(portfolio_drawdown_pct) / 100.0
+        portfolio_vol = max(0.08, shocked_portfolio_beta * 0.18)
+        
+        z_score = (cash_ratio - drawdown_ratio) / portfolio_vol
+        # Calculate Gaussian tail probability via erf
+        ruin_prob = round(float(0.5 * (1.0 - math.erf(z_score / math.sqrt(2.0))) * 100.0), 2)
+        ruin_prob = max(0.1, min(99.9, ruin_prob))
+
+        cash_pct = round(cash_ratio * 100, 1)
+        if ruin_prob < 5.0 or cash_pct >= 25.0:
             adequacy = "STRONG_LIQUIDITY_BUFFER"
-            ruin_prob = 1.8
-        elif cash_pct >= 15.0:
+        elif ruin_prob < 20.0 or cash_pct >= 15.0:
             adequacy = "ADEQUATE_BUFFER"
-            ruin_prob = 5.2
         else:
             adequacy = "VULNERABLE_DEFICIT"
-            ruin_prob = 18.5
 
         return {
             "scenario": scenario,
             "baseline_total_value": baseline_total_val,
-            "shocked_total_value": round(shocked_total_val, 2),
+            "shocked_total_value": shocked_total_val,
             "portfolio_pnl_delta": portfolio_pnl_delta,
             "portfolio_drawdown_pct": portfolio_drawdown_pct,
             "shocked_portfolio_beta": shocked_portfolio_beta,
@@ -447,10 +457,21 @@ class PortfolioService:
                 "cash_amount": cash,
                 "cash_pct_after_shock": cash_pct,
                 "adequacy_rating": adequacy,
-                "projected_ruin_probability_pct": ruin_prob
+                "projected_ruin_probability_pct": ruin_prob,
+                "calculation_method": "parametric_gaussian_shortfall",
+                "provenance": {
+                    "model": "1-Year Parametric Capital Shortfall P(Loss > Cash)",
+                    "portfolio_volatility": round(portfolio_vol, 4),
+                    "z_score": round(z_score, 2)
+                }
             },
             "asset_impacts": asset_impacts,
             "agent_guidance": scenario.get("agent_guidance", {}),
+            "provenance": {
+                "source": "BETA_ADJUSTED_FACTOR_STRESS",
+                "portfolio_beta": shocked_portfolio_beta,
+                "method": "sector_shock_beta_scaling"
+            },
             "regulatory_compliance_guardrail": {
                 "framework": "SEBI (Research Analysts) Regulations, 2014 & SEBI (Investment Advisers) Regulations, 2013",
                 "disclaimer_type": "STATUTORY_QUANTITATIVE_SIMULATION",

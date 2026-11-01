@@ -97,9 +97,9 @@ def run_all_tests():
     assert res_timeout["telemetry"]["degraded_data"] is True
     print("5. RAG Timeout Degradation Passed: Graceful fallback to technical momentum.")
 
-    # 6. Test Simulate Trade (TSLA with Conservative profile)
+    # 6. Test Simulate Trade (NVDA with Conservative profile)
     trade_req = SimulateTradeRequest(
-        ticker="TSLA",
+        ticker="NVDA",
         action="BUY",
         quantity=10,
         price=240.0,
@@ -308,7 +308,9 @@ def run_all_tests():
         test_beta_and_volatility_calculation,
         test_dynamic_macro_regimes,
         test_portfolio_conservation_laws,
-        test_attribution_weights_invariance
+        test_attribution_weights_invariance,
+        test_parametric_shortfall_and_beta_adjusted_stress,
+        test_backtest_fallback_honesty_and_provenance
     )
     test_rsi_mathematical_invariants()
     test_rsi_factor_scoring_non_linearity()
@@ -319,7 +321,9 @@ def run_all_tests():
     test_dynamic_macro_regimes()
     test_portfolio_conservation_laws()
     test_attribution_weights_invariance()
-    print("20. Mathematical Properties & Invariants Passed: Non-linear RSI scoring, weekly VaR root-time scaling, dynamic beta/volatility, macro regimes, and attribution weights invariance verified.")
+    test_parametric_shortfall_and_beta_adjusted_stress()
+    test_backtest_fallback_honesty_and_provenance()
+    print("20. Mathematical Properties & Invariants Passed: Non-linear RSI scoring, weekly VaR root-time scaling, dynamic beta/volatility, macro regimes, shortfall risk, backtest fallback honesty, and provenance verified.")
 
     # 21. Test RAG Faithfulness & Citation Evaluation Benchmark
     from backend.rag.evaluator import rag_evaluator

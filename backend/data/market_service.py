@@ -251,20 +251,35 @@ class MarketService:
         }
 
     @staticmethod
-    def calculate_volume_anomaly(current_volume: float, historical_volumes: List[float], window: int = 20) -> float:
+    def calculate_volume_anomaly(
+        current_volume: Any,
+        historical_volumes: Optional[List[float]] = None,
+        window: int = 20,
+        baseline_window: Optional[int] = None
+    ) -> float:
         """
         Calculates volume anomaly ratio relative to prior N-day moving average volume
         (excluding the current volume bar to avoid self-dilution).
+        Supports either (current_volume, historical_volumes, window) or a single full volume series list.
         """
-        if not historical_volumes:
-            return 1.0
-        # If historical volumes contain today's volume at the end, exclude it from baseline
-        if len(historical_volumes) > 1:
-            baseline_vols = historical_volumes[-window - 1:-1]
+        win = baseline_window if baseline_window is not None else window
+        if isinstance(current_volume, (list, tuple)):
+            series = list(current_volume)
+            if not series:
+                return 1.0
+            cur_vol = float(series[-1])
+            baseline_vols = series[-win - 1:-1] if len(series) > 1 else series
         else:
-            baseline_vols = historical_volumes
+            cur_vol = float(current_volume)
+            if not historical_volumes:
+                return 1.0
+            if len(historical_volumes) > 1:
+                baseline_vols = historical_volumes[-win - 1:-1]
+            else:
+                baseline_vols = historical_volumes
+
         avg_vol = float(np.mean(baseline_vols)) if baseline_vols else 1.0
-        return round(float(current_volume) / avg_vol, 2) if avg_vol > 0 else 1.0
+        return round(float(cur_vol) / avg_vol, 2) if avg_vol > 0 else 1.0
 
     @staticmethod
     def calculate_beta(asset_closes: List[float], benchmark_closes: List[float]) -> float:
@@ -448,7 +463,12 @@ class MarketService:
             pass
 
         # Fallback offline snapshot if yfinance fails
-        return self._generate_fallback_dataset(ticker_up)
+        fallback_dataset = self._generate_fallback_dataset(ticker_up)
+        self._data_cache[ticker_up] = {
+            "cached_at": now,
+            "data": fallback_dataset
+        }
+        return fallback_dataset
 
     def _generate_fallback_dataset(self, ticker: str) -> Dict[str, Any]:
         """Generates deterministic offline snapshot dataset when external APIs fail."""
