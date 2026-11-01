@@ -144,7 +144,6 @@ def run_all_tests():
     )
     uncataloged_res = run_coro(analyze_stock(uncataloged_req))
     assert uncataloged_res["ticker"] == "CUSTOMTECH"
-    # Citations must be empty for an uncataloged ticker, NOT populated with Reliance filings
     assert len(uncataloged_res["agents"]["rag"]["citations"]) == 0
     print("9. Uncataloged Ticker Isolation Passed: 0 cross-contaminating citations returned.")
 
@@ -152,7 +151,7 @@ def run_all_tests():
     try:
         invalid_trade = SimulateTradeRequest(
             ticker="TSLA",
-            quantity=-5, # Invalid negative quantity
+            quantity=-5,
             price=240.0
         )
         assert False, "Should have thrown ValidationError on negative quantity"
@@ -176,7 +175,6 @@ def run_all_tests():
     updated_p = db.get_user_profile()
     assert updated_p.risk_level == "aggressive"
     assert updated_p.portfolio_cash == 300000.0
-    # Restore
     db.upsert_user_profile(UserProfileDB(risk_level=orig_risk, portfolio_cash=250000.0))
     assert db.get_user_profile().risk_level == orig_risk
     print("12. User Profile Persistence Passed: Write & read verified.")
@@ -266,7 +264,6 @@ def run_all_tests():
     assert upload_res["ticker"] == "AMD"
     assert upload_res["chunks_created"] >= 1
 
-    # Verify search finds the uploaded citation
     from backend.rag.retriever import rag_retriever
     search_res = rag_retriever.search("AMD", query="data center server epyc market share", top_k=2)
     assert len(search_res["citations"]) >= 1
@@ -304,19 +301,25 @@ def run_all_tests():
     # 20. Test Mathematical Properties & Quantitative Invariants
     from backend.tests.test_mathematical_properties import (
         test_rsi_mathematical_invariants,
+        test_rsi_factor_scoring_non_linearity,
         test_moving_averages_and_macd_properties,
         test_volume_anomaly_properties,
-        test_backtest_performance_metrics_math,
+        test_weekly_drawdown_risk_scaling,
+        test_beta_and_volatility_calculation,
+        test_dynamic_macro_regimes,
         test_portfolio_conservation_laws,
         test_attribution_weights_invariance
     )
     test_rsi_mathematical_invariants()
+    test_rsi_factor_scoring_non_linearity()
     test_moving_averages_and_macd_properties()
     test_volume_anomaly_properties()
-    test_backtest_performance_metrics_math()
+    test_weekly_drawdown_risk_scaling()
+    test_beta_and_volatility_calculation()
+    test_dynamic_macro_regimes()
     test_portfolio_conservation_laws()
     test_attribution_weights_invariance()
-    print("20. Mathematical Properties & Invariants Passed: RSI bounds, MACD identities, volume anomaly, CAGR, Max Drawdown, portfolio conservation laws, and attribution weights invariance verified.")
+    print("20. Mathematical Properties & Invariants Passed: Non-linear RSI scoring, weekly VaR root-time scaling, dynamic beta/volatility, macro regimes, and attribution weights invariance verified.")
 
     # 21. Test RAG Faithfulness & Citation Evaluation Benchmark
     from backend.rag.evaluator import rag_evaluator

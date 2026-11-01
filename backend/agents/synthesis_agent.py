@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Dict, Any
 
 from backend.agents.llm_client import llm_client
@@ -36,6 +37,7 @@ class SynthesisAgent:
                 "risk_profile": 40
             }
             weighted_score = (quant_score * 0.60) + (behavioral_score * 0.40)
+            asset_conviction_score = float(quant_score)
         else:
             weight_breakdown = {
                 "technicals": 35,
@@ -43,6 +45,7 @@ class SynthesisAgent:
                 "risk_profile": 25
             }
             weighted_score = (quant_score * 0.35) + (rag_score * 0.40) + (behavioral_score * 0.25)
+            asset_conviction_score = (quant_score * 0.45) + (rag_score * 0.55)
 
         # Enforce mathematical invariance: attribution weights must strictly sum to 100%
         total_weight = sum(weight_breakdown.values())
@@ -53,7 +56,10 @@ class SynthesisAgent:
             if discrepancy != 0:
                 highest_k = max(weight_breakdown, key=weight_breakdown.get)
                 weight_breakdown[highest_k] += discrepancy
-        assert sum(weight_breakdown.values()) == 100, f"Attribution weights sum ({sum(weight_breakdown.values())}) must equal 100"
+
+        total_check = sum(weight_breakdown.values())
+        if total_check != 100:
+            raise ValueError(f"Attribution weights sum ({total_check}) must equal 100")
 
         # Action determination
         if rag_timed_out:
@@ -87,48 +93,44 @@ class SynthesisAgent:
             final_action = "SELL"
             headline = f"De-risk Position in {ticker}: Elevated Downside Volatility and High Risk Penalties"
 
-        macro_regimes = {
-            "RELIANCE": {
-                "regime_title": "Energy Transition Capex & Retail Competition",
-                "volatility_environment": "Moderate Macro Volatility",
-                "bias_explanation": "Fundamental debt-servicing headwind carries 40% attribution weight over momentum."
-            },
-            "NVDA": {
-                "regime_title": "AI Infrastructure Hyper-Growth & High Beta",
-                "volatility_environment": "Elevated Beta (1.75x Market)",
-                "bias_explanation": "Technicals & fundamental revenue explosion align; risk manager enforces strict position sizing."
-            },
-            "TSLA": {
-                "regime_title": "Automotive Gross Margin Compression",
-                "volatility_environment": "High Tail-Risk Volatility",
-                "bias_explanation": "Bearish fundamental margins invoke conservative risk-veto rules."
-            },
-            "TCS": {
-                "regime_title": "Defensive BFSI Free Cashflow Accumulation",
-                "volatility_environment": "Low Volatility Capital Preserver",
-                "bias_explanation": "High payout ratios and low beta make this an ideal conservative defensive anchor."
-            },
-            "INFY": {
-                "regime_title": "Cloud Modernization & Discretionary IT Spend",
-                "volatility_environment": "Balanced Quality Growth",
-                "bias_explanation": "Balanced weighting across technical recovery and long-term operating margins."
-            },
-            "AAPL": {
-                "regime_title": "Services Margin Expansion & Ecosystem Moat",
-                "volatility_environment": "Low Beta Blue-Chip",
-                "bias_explanation": "Solid cash generation offsets cyclical hardware replacement cycles."
-            },
-            "HDFCBANK": {
-                "regime_title": "Credit Expansion & Deposit Ratio Normalization",
-                "volatility_environment": "Low-to-Moderate Beta Financial Core",
-                "bias_explanation": "Post-merger loan-to-deposit ratio consolidation supported by high operating margins."
+        # Dynamically compute macro regime attributes from live computed metrics
+        beta = float(market_data.get("beta", 1.0))
+        annual_vol = float(market_data.get("annualized_volatility", 0.25))
+
+        if annual_vol > 0.35 or beta > 1.3:
+            vol_env = f"High Beta ({beta:.2f}x) / High Volatility ({int(annual_vol * 100)}% ann.)"
+        elif annual_vol < 0.20 and beta < 0.9:
+            vol_env = f"Defensive Low Beta ({beta:.2f}x) / Low Volatility ({int(annual_vol * 100)}% ann.)"
+        else:
+            vol_env = f"Market-Aligned Beta ({beta:.2f}x) / Moderate Volatility ({int(annual_vol * 100)}% ann.)"
+
+        if quant_score >= 65 and rag_score >= 60:
+            regime_title = "Expansionary Growth & Momentum Regime"
+        elif quant_score <= 40 and rag_score <= 45:
+            regime_title = "Capital Preservation & De-risking Regime"
+        elif has_disagreement:
+            regime_title = "Dialectic Cross-Current Regime (Quant/Fundamental Divergence)"
+        elif rag_timed_out:
+            regime_title = "Technical Momentum-Only Regime (RAG Degraded)"
+        else:
+            regime_title = "Consolidation & Range-Bound Regime"
+
+        bias_explanation = (
+            f"Consensus weights: {weight_breakdown.get('technicals', 0)}% technicals, "
+            f"{weight_breakdown.get('fundamentals', 0)}% fundamentals, "
+            f"{weight_breakdown.get('risk_profile', 0)}% risk constraints."
+        )
+
+        active_regime = {
+            "regime_title": regime_title,
+            "volatility_environment": vol_env,
+            "bias_explanation": bias_explanation,
+            "provenance": {
+                "source": market_data.get("feed_status", "LIVE_YAHOO"),
+                "as_of": market_data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "method": "computed_dynamic_factors"
             }
         }
-        active_regime = macro_regimes.get(ticker.upper(), {
-            "regime_title": "Multi-Factor Market Regime",
-            "volatility_environment": "Balanced Risk Dispersion",
-            "bias_explanation": "Attribution balanced across technical trend, fundamental quality, and risk limits."
-        })
 
         return {
             "final_action": final_action,
@@ -138,6 +140,7 @@ class SynthesisAgent:
             "quant_score": quant_score,
             "rag_score": rag_score,
             "behavioral_score": behavioral_score,
+            "asset_conviction_score": round(asset_conviction_score, 1),
             "rag_timed_out": rag_timed_out,
             "has_disagreement": has_disagreement,
             "user_risk": user_risk
@@ -209,6 +212,7 @@ class SynthesisAgent:
             "headline": meta["headline"],
             "weight_breakdown": meta["weight_breakdown"],
             "macro_regime": meta["macro_regime"],
+            "asset_conviction_score": meta.get("asset_conviction_score"),
             "explain_modes": explain_modes
         }
 
@@ -241,6 +245,7 @@ class SynthesisAgent:
             "headline": meta["headline"],
             "weight_breakdown": meta["weight_breakdown"],
             "macro_regime": meta["macro_regime"],
+            "asset_conviction_score": meta.get("asset_conviction_score"),
             "explain_modes": explain_modes
         }
 

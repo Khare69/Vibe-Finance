@@ -37,49 +37,63 @@ class MarketService:
             "sector": "Energy",
             "exchange": "NSE",
             "currency": "INR",
-            "benchmark": "^NSEI"
+            "benchmark": "^NSEI",
+            "baseline_beta": 0.88,
+            "baseline_volatility": 0.22
         },
         "TCS": {
             "name": "Tata Consultancy Services Ltd.",
             "sector": "Tech",
             "exchange": "NSE",
             "currency": "INR",
-            "benchmark": "^NSEI"
+            "benchmark": "^NSEI",
+            "baseline_beta": 0.72,
+            "baseline_volatility": 0.18
         },
         "INFY": {
             "name": "Infosys Ltd.",
             "sector": "Tech",
             "exchange": "NSE",
             "currency": "INR",
-            "benchmark": "^NSEI"
+            "benchmark": "^NSEI",
+            "baseline_beta": 0.85,
+            "baseline_volatility": 0.24
         },
         "HDFCBANK": {
             "name": "HDFC Bank Ltd.",
             "sector": "Financials",
             "exchange": "NSE",
             "currency": "INR",
-            "benchmark": "^NSEI"
+            "benchmark": "^NSEI",
+            "baseline_beta": 0.92,
+            "baseline_volatility": 0.19
         },
         "NVDA": {
             "name": "NVIDIA Corporation",
             "sector": "Tech",
             "exchange": "NASDAQ",
             "currency": "USD",
-            "benchmark": "^GSPC"
+            "benchmark": "^GSPC",
+            "baseline_beta": 1.75,
+            "baseline_volatility": 0.44
         },
         "AAPL": {
             "name": "Apple Inc.",
             "sector": "Tech",
             "exchange": "NASDAQ",
             "currency": "USD",
-            "benchmark": "^GSPC"
+            "benchmark": "^GSPC",
+            "baseline_beta": 1.05,
+            "baseline_volatility": 0.21
         },
         "TSLA": {
             "name": "Tesla, Inc.",
-            "sector": "Tech",
+            "sector": "Automotive",
             "exchange": "NASDAQ",
             "currency": "USD",
-            "benchmark": "^GSPC"
+            "benchmark": "^GSPC",
+            "baseline_beta": 2.05,
+            "baseline_volatility": 0.52
         }
     }
 
@@ -158,6 +172,37 @@ class MarketService:
         return round(100.0 - (100.0 / (1.0 + rs)), 1)
 
     @staticmethod
+    def calculate_rsi_factor_score(rsi: float) -> float:
+        """
+        Non-linear momentum factor scoring for RSI-14.
+        Optimal bullish momentum peaks in the 55-65 zone (+10 to +12 pts).
+        Overbought conditions (>70) decay rapidly into a mean-reversion risk penalty (-6 to -14 pts).
+        Oversold (<30) captures downside trend deterioration with potential capitulation bounce floor.
+        Neutral (45-55) gives a balanced ~0 pt baseline.
+        """
+        if rsi < 20.0:
+            # Extreme capitulation oversold
+            return -3.0
+        elif rsi < 30.0:
+            # Oversold breakdown
+            return -8.0
+        elif rsi < 45.0:
+            # Weak / bearish momentum
+            return -4.0 + ((rsi - 45.0) * 0.4)
+        elif rsi <= 65.0:
+            # Strong healthy bullish trend zone (peak at 60-65)
+            # 45 -> 0, 55 -> +6, 65 -> +12
+            return (rsi - 45.0) * 0.6
+        elif rsi <= 75.0:
+            # Overbought warning: diminishing marginal momentum
+            # 65 -> +12, 70 -> +6, 75 -> 0.0
+            return 12.0 - ((rsi - 65.0) * 1.2)
+        else:
+            # Severe overbought (>75): parabolic risk, mean-reversion penalty
+            # 75 -> 0.0, 85 -> -12.0
+            return max(-14.0, -((rsi - 75.0) * 1.2))
+
+    @staticmethod
     def calculate_macd(prices: List[float], fast: int = 12, slow: int = 26, signal_period: int = 9) -> Dict[str, float]:
         """Calculates 12/26/9 MACD line, signal line, and histogram series."""
         if len(prices) < slow:
@@ -207,15 +252,44 @@ class MarketService:
 
     @staticmethod
     def calculate_volume_anomaly(current_volume: float, historical_volumes: List[float], window: int = 20) -> float:
-        """Calculates volume anomaly ratio relative to N-day moving average volume."""
+        """
+        Calculates volume anomaly ratio relative to prior N-day moving average volume
+        (excluding the current volume bar to avoid self-dilution).
+        """
         if not historical_volumes:
             return 1.0
-        recent = historical_volumes[-window:] if len(historical_volumes) >= window else historical_volumes
-        avg_vol = float(np.mean(recent)) if recent else 1.0
+        # If historical volumes contain today's volume at the end, exclude it from baseline
+        if len(historical_volumes) > 1:
+            baseline_vols = historical_volumes[-window - 1:-1]
+        else:
+            baseline_vols = historical_volumes
+        avg_vol = float(np.mean(baseline_vols)) if baseline_vols else 1.0
         return round(float(current_volume) / avg_vol, 2) if avg_vol > 0 else 1.0
 
     @staticmethod
+    def calculate_beta(asset_closes: List[float], benchmark_closes: List[float]) -> float:
+        """
+        Calculates rolling 1-year beta from daily percentage returns: Cov(r, rm) / Var(rm).
+        """
+        if len(asset_closes) < 20 or len(benchmark_closes) < 20:
+            return 1.0
+        min_len = min(len(asset_closes), len(benchmark_closes))
+        a = np.array(asset_closes[-min_len:], dtype=float)
+        b = np.array(benchmark_closes[-min_len:], dtype=float)
+
+        r = np.diff(a) / a[:-1]
+        rm = np.diff(b) / b[:-1]
+
+        var_m = float(np.var(rm))
+        if var_m <= 1e-8:
+            return 1.0
+        cov = float(np.cov(r, rm)[0, 1])
+        beta = cov / var_m
+        return round(float(max(0.1, min(4.0, beta))), 2)
+
+    @classmethod
     def calculate_momentum_score(
+        cls,
         price: float,
         sma_50: float,
         sma_200: float,
@@ -225,38 +299,36 @@ class MarketService:
     ) -> int:
         """
         Computes a continuous, deterministic 0-100 Momentum Score based on
-        RSI distance, trend alignment, MACD impulse, and 1-month rate of change.
+        decoupled orthogonal factors:
+        1. Structural Trend Regime (Golden/Death cross, price vs 200-SMA)
+        2. Non-linear RSI Momentum & Mean-Reversion Quality (penalizing overbought froth)
+        3. MACD Impulse & Acceleration
+        4. Rate-of-Change / 1-Month Return Velocity
         """
         score = 50.0
 
-        # RSI contribution (scales -18 to +18)
-        score += (rsi - 50.0) * 0.45
+        # Dimension 1: Non-linear RSI Factor (peaks in 55-65 zone, penalizes >75 overbought)
+        score += cls.calculate_rsi_factor_score(rsi)
 
-        # Trend alignment (price vs 50-SMA and 200-SMA)
-        if price > sma_50:
+        # Dimension 2: Structural Trend Regime (Decoupled from short-term noise)
+        if sma_50 > sma_200:
+            score += 10.0  # Bullish Golden Cross regime
+        else:
+            score -= 10.0  # Bearish Death Cross regime
+
+        if price > sma_200:
+            score += 6.0   # Price above secular trend anchor
+        else:
+            score -= 6.0
+
+        # Dimension 3: MACD Impulse
+        if macd_hist > 0:
             score += 8.0
         else:
             score -= 8.0
 
-        if price > sma_200:
-            score += 7.0
-        else:
-            score -= 7.0
-
-        # Golden / Death Cross
-        if sma_50 > sma_200:
-            score += 10.0
-        else:
-            score -= 10.0
-
-        # MACD Histogram direction
-        if macd_hist > 0:
-            score += 7.0
-        else:
-            score -= 7.0
-
-        # 1-Month Return momentum (clamped between -10 and +10)
-        score += max(-10.0, min(10.0, return_1m_pct * 0.8))
+        # Dimension 4: Rate of Change / Return Velocity (clamped between -10 and +10)
+        score += max(-10.0, min(10.0, return_1m_pct * 0.7))
 
         # Clamp strictly between 5 and 95
         return int(max(5, min(95, round(score))))
@@ -278,6 +350,8 @@ class MarketService:
                 return entry["data"]
 
         symbol = self._resolve_symbol(ticker_up)
+        meta = self.STOCK_CATALOG.get(ticker_up, {})
+        benchmark_sym = meta.get("benchmark", "^GSPC")
 
         try:
             t = yf.Ticker(symbol)
@@ -311,17 +385,26 @@ class MarketService:
                 sma_200 = self.calculate_sma(closes, 200)
                 macd_data = self.calculate_macd(closes, 12, 26, 9)
 
-                # 20-day Volume Anomaly
-                recent_vols = volumes[-20:] if len(volumes) >= 20 else volumes
-                avg_vol = float(np.mean(recent_vols)) if recent_vols else 1.0
-                vol_ratio = round(float(volumes[-1]) / avg_vol, 2) if avg_vol > 0 else 1.0
+                # 20-day Volume Anomaly (excluding current volume from baseline)
+                vol_ratio = self.calculate_volume_anomaly(volumes[-1], volumes, 20)
 
                 # 1-Month Return % (approx 21 trading days)
                 ret_1m = round(((current_price - closes[-22]) / closes[-22]) * 100, 2) if len(closes) >= 22 else change_pct
 
                 # Annualized Volatility (log returns std * sqrt(252))
                 log_rets = [math.log(closes[j] / closes[j - 1]) for j in range(1, len(closes)) if closes[j - 1] > 0]
-                volatility = round(float(np.std(log_rets) * math.sqrt(252)), 2) if len(log_rets) > 5 else 0.25
+                volatility = round(float(np.std(log_rets) * math.sqrt(252)), 2) if len(log_rets) > 5 else meta.get("baseline_volatility", 0.25)
+
+                # Calculate or fallback Beta
+                beta = meta.get("baseline_beta", 1.0)
+                try:
+                    tb = yf.Ticker(benchmark_sym)
+                    df_b = tb.history(period="1y", interval="1d")
+                    if df_b is not None and not df_b.empty:
+                        b_closes = [float(x) for x in df_b["Close"].dropna()]
+                        beta = self.calculate_beta(closes, b_closes)
+                except Exception:
+                    beta = meta.get("baseline_beta", 1.0)
 
                 # Deterministic Momentum Score
                 momentum = self.calculate_momentum_score(
@@ -343,7 +426,7 @@ class MarketService:
                     "low_52w": round(float(min(lows[-252:])), 2) if len(lows) >= 252 else round(float(min(lows)), 2),
                     "volume_anomaly_ratio": vol_ratio,
                     "annualized_volatility": volatility,
-                    "beta": self.STOCK_CATALOG.get(ticker_up, {}).get("beta", 1.0),
+                    "beta": beta,
                     "metrics": {
                         "rsi_14": rsi,
                         "sma_50": sma_50,
@@ -404,6 +487,7 @@ class MarketService:
         sma_50 = self.calculate_sma(closes, 50)
         sma_200 = self.calculate_sma(closes, 200)
         macd = self.calculate_macd(closes, 12, 26, 9)
+        momentum = self.calculate_momentum_score(price, sma_50, sma_200, rsi, macd["hist"], change_pct)
 
         return {
             "ticker": ticker_up,
@@ -420,7 +504,7 @@ class MarketService:
                 "rsi_14": rsi,
                 "sma_50": sma_50,
                 "sma_200": sma_200,
-                "momentum_score": 50,
+                "momentum_score": momentum,
                 "macd": macd
             },
             "bars": bars,
@@ -445,7 +529,8 @@ class MarketService:
                     "current_price": dataset["current_price"],
                     "change_percent": dataset["change_percent"],
                     "volume_anomaly_ratio": dataset["volume_anomaly_ratio"],
-                    "beta": dataset["beta"]
+                    "annualized_volatility": dataset.get("annualized_volatility", meta.get("baseline_volatility", 0.25)),
+                    "beta": dataset.get("beta", meta.get("baseline_beta", 1.0))
                 })
         return stocks
 
@@ -457,7 +542,8 @@ class MarketService:
             return {
                 **meta,
                 "base_price": dataset["current_price"] if dataset else 100.0,
-                "annualized_volatility": dataset["annualized_volatility"] if dataset else 0.25
+                "annualized_volatility": dataset["annualized_volatility"] if dataset else meta.get("baseline_volatility", 0.25),
+                "beta": dataset["beta"] if dataset else meta.get("baseline_beta", 1.0)
             }
         return None
 
@@ -468,7 +554,9 @@ class MarketService:
             "name": f"{ticker_up} Corp",
             "sector": "General",
             "exchange": "Global",
-            "currency": "USD"
+            "currency": "USD",
+            "baseline_beta": 1.0,
+            "baseline_volatility": 0.25
         })
 
         currency = meta.get("currency", "USD")
@@ -476,27 +564,18 @@ class MarketService:
 
         dataset = self._fetch_historical_dataset(ticker_up)
 
-        if simulated_stale_data or dataset.get("feed_status") == "STALE_FALLBACK_EOD":
-            return {
-                "current_price": dataset["current_price"],
-                "change_percent": dataset["change_percent"],
-                "volume_anomaly_ratio": dataset["volume_anomaly_ratio"],
-                "feed_status": "STALE_FALLBACK_EOD",
-                "confidence_penalty": 25.0,
-                "symbol": symbol,
-                "currency": currency,
-                "high_52w": dataset["high_52w"],
-                "low_52w": dataset["low_52w"],
-                "metrics": dataset["metrics"],
-                "timestamp": dataset.get("timestamp")
-            }
+        is_stale = simulated_stale_data or dataset.get("feed_status") == "STALE_FALLBACK_EOD"
 
         return {
+            "ticker": ticker_up,
             "current_price": dataset["current_price"],
+            "prev_close": dataset.get("prev_close", dataset["current_price"]),
             "change_percent": dataset["change_percent"],
             "volume_anomaly_ratio": dataset["volume_anomaly_ratio"],
-            "feed_status": dataset.get("feed_status", "LIVE_YAHOO"),
-            "confidence_penalty": 0.0,
+            "annualized_volatility": dataset.get("annualized_volatility", meta.get("baseline_volatility", 0.25)),
+            "beta": dataset.get("beta", meta.get("baseline_beta", 1.0)),
+            "feed_status": "STALE_FALLBACK_EOD" if is_stale else dataset.get("feed_status", "LIVE_YAHOO"),
+            "confidence_penalty": 25.0 if is_stale else 0.0,
             "symbol": symbol,
             "currency": currency,
             "high_52w": dataset["high_52w"],

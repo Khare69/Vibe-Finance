@@ -223,10 +223,12 @@ async def analyze_stock(req: AnalyzeRequest):
 
     final_state = await multi_agent_graph.execute(initial_state)
 
-    # Mathematical invariant check: assert attribution weights strictly sum to 100%
+    # Mathematical invariant check: verify attribution weights strictly sum to 100%
     synth_weights = final_state.synthesis_result.get("weight_breakdown", {})
     if synth_weights:
-        assert sum(synth_weights.values()) == 100, f"Attribution weights sum must equal 100%, got {sum(synth_weights.values())}"
+        total_w = sum(synth_weights.values())
+        if total_w != 100:
+            raise ValueError(f"Attribution weights sum must equal 100%, got {total_w}")
 
     return {
         "ticker": final_state.ticker,
@@ -236,6 +238,8 @@ async def analyze_stock(req: AnalyzeRequest):
             "current_price": final_state.market_data.get("current_price", 100.0),
             "change_percent": final_state.market_data.get("change_percent", 0.0),
             "volume_anomaly_ratio": final_state.market_data.get("volume_anomaly_ratio", 1.0),
+            "annualized_volatility": final_state.market_data.get("annualized_volatility", 0.25),
+            "beta": final_state.market_data.get("beta", 1.0),
             "feed_status": final_state.market_data.get("feed_status", "LIVE"),
             "confidence_penalty": final_state.market_data.get("confidence_penalty", 0.0)
         },
