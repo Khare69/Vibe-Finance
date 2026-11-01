@@ -283,7 +283,12 @@ def run_all_tests():
     search_res = rag_retriever.search("AMD", query="data center server epyc market share", top_k=2)
     assert len(search_res["citations"]) >= 1
     assert "EPYC" in search_res["citations"][0]["excerpt"]
-    print(f"18. Dynamic RAG Ingestion & Retrieval Passed: Citation indexed and retrieved ({search_res['citations'][0]['excerpt'][:45]}...).")
+
+    # Test point-in-time isolation: past as_of_date must strictly reject future filings
+    search_past = rag_retriever.search("AMD", query="data center server epyc", as_of_date="2020-01-01")
+    assert len(search_past["citations"]) == 0, "Point-in-time leak: found filings dated after as_of_date!"
+    assert search_past["status"] == "NO_POINT_IN_TIME_FILINGS"
+    print(f"18. Dynamic RAG Ingestion, Retrieval & Point-in-Time Isolation Passed: Citation indexed and past date strictly isolated.")
 
     # 19. Test Persistent SQLite REST Endpoints Integration
     from backend.main import get_stored_user_profile, update_stored_user_profile, save_decision_memo, list_decision_memos

@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import threading
 from typing import List, Dict, Any, Optional
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -27,7 +28,8 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
         "excerpt": "Net Interest Margin (NIM) stabilized at 3.45% post-merger integration. Deposit mobilization accelerated 16.8% YoY, aiding gradual recovery in our credit-to-deposit ratio.",
         "sentiment": "positive",
         "keywords": ["nim", "deposits", "credit deposit ratio", "merger synergies", "margins"],
-        "relevance_base": 0.93
+        "relevance_base": 0.93,
+        "filing_date": "2026-01-18"
     },
     {
         "id": "hdfc-cite-2",
@@ -38,7 +40,8 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
         "excerpt": "Gross Non-Performing Assets (GNPA) stood robust at 1.28% against 1.34% sequentially. Slippages were well contained across commercial banking and retail portfolios.",
         "sentiment": "positive",
         "keywords": ["asset quality", "gnpa", "provisions", "credit quality", "balance sheet strength"],
-        "relevance_base": 0.91
+        "relevance_base": 0.91,
+        "filing_date": "2026-01-18"
     },
     {
         "id": "hdfc-cite-3",
@@ -49,7 +52,8 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
         "excerpt": "Operating expenses rose 11.2% YoY due to ongoing branch network expansion and IT platform modernization, slightly compressing cost-to-income efficiency ratios.",
         "sentiment": "negative",
         "keywords": ["operating expenses", "opex", "cost to income", "headwinds"],
-        "relevance_base": 0.85
+        "relevance_base": 0.85,
+        "filing_date": "2026-01-18"
     }
 ]
 
@@ -58,7 +62,8 @@ class VectorStore:
     """
     Vector Knowledge Base Engine for corporate filings and earnings transcripts.
     Implements TF-IDF n-gram vectorization, normalized cosine similarity search,
-    ticker pre-filtering, document persistence, and prompt-injection sanitization.
+    ticker pre-filtering, strict point-in-time isolation (zero future look-ahead),
+    thread-safe atomic document persistence, and anti-DoS chunk/size caps.
     """
 
     def __init__(self, storage_path: Optional[str] = None):
@@ -69,6 +74,7 @@ class VectorStore:
         self._vectorizer: Optional[TfidfVectorizer] = None
         self._document_vectors: Optional[np.ndarray] = None
         self.sentiment_timelines = SENTIMENT_TIMELINES
+        self._write_lock = threading.Lock()
 
         self._initialize_corpus()
 
@@ -87,74 +93,81 @@ class VectorStore:
         self._fit_vectorizer()
 
     def _save_to_disk(self):
-        """Persists document store to disk so user uploads survive restarts."""
-        try:
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(self.documents, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
+        """Thread-safe persistence of document store to disk."""
+        with self._write_lock:
+            try:
+                temp_path = f"{self.storage_path}.tmp"
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    json.dump(self.documents, f, indent=2, ensure_ascii=False)
+                # Atomic file replacement
+                if os.path.exists(temp_path):
+                    os.replace(temp_path, self.storage_path)
+            except Exception:
+                pass
 
     def _fit_vectorizer(self):
-        """Re-fits the TF-IDF vectorizer over all document texts in the corpus."""
-        if not self.documents:
-            self._vectorizer = None
-            self._document_vectors = None
-            return
+        """Re-fits the TF-IDF vectorizer over all document texts in the corpus under thread lock."""
+        with self._write_lock:
+            if not self.documents:
+                self._vectorizer = None
+                self._document_vectors = None
+                return
 
-        corpus_texts = []
-        for doc in self.documents:
-            text = f"{doc.get('document_title', '')} {doc.get('section', '')} {doc.get('excerpt', '')}"
-            if doc.get("keywords"):
-                text += " " + " ".join(doc["keywords"])
-            corpus_texts.append(text)
+            corpus_texts = []
+            for d in self.documents:
+                title = d.get("document_title", "")
+                section = d.get("section", "")
+                excerpt = d.get("excerpt", "")
+                keywords = " ".join(d.get("keywords", []))
+                corpus_texts.append(f"{title} {section} {excerpt} {keywords}")
 
-        self._vectorizer = TfidfVectorizer(
-            ngram_range=(1, 2),
-            sublinear_tf=True,
-            max_features=5000,
-            token_pattern=r'(?u)\b\w+\b'
-        )
-        self._document_vectors = self._vectorizer.fit_transform(corpus_texts)
+            self._vectorizer = TfidfVectorizer(
+                stop_words="english",
+                ngram_range=(1, 2),
+                max_features=2500,
+                sublinear_tf=True
+            )
+            self._document_vectors = self._vectorizer.fit_transform(corpus_texts)
 
-    @staticmethod
-    def sanitize_text(text: str) -> str:
+    def sanitize_text(self, text: str) -> str:
         """
-        Sanitizes text against prompt-injection attacks and control characters.
-        Treats corporate filing content as untrusted data.
+        Sanitizes text inputs to prevent prompt injection and control character attacks.
+        Enforces maximum character boundary to prevent quadratic regex/vector denial-of-service.
         """
         if not text:
             return ""
-        # Remove null bytes and non-printable control characters (keep newlines/tabs)
-        sanitized = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
-        # Neutralize common prompt-injection attempts
-        injection_patterns = [
-            r'(?i)ignore\s+(all\s+)?(previous|prior)\s+instructions?',
-            r'(?i)you\s+are\s+now\s+(a|an)?\s+',
-            r'(?i)system\s*prompt\s*:',
-            r'(?i)disregard\s+(above|all)\s+',
-            r'(?i)new\s+rule\s*:'
-        ]
-        for pattern in injection_patterns:
-            sanitized = re.sub(pattern, '[FILTERED_INSTRUCTION]', sanitized)
-        return sanitized.strip()
+        # Cap text at 500k characters
+        capped = text[:500000]
+        # Remove null bytes and non-printable control characters (except newline, tab, cr)
+        cleaned = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", capped)
+        # Neutralize common prompt-injection delimiters
+        cleaned = re.sub(r"(?i)<\s*(system|prompt|instruction|context)\s*>", "[filtered_tag]", cleaned)
+        cleaned = re.sub(r"(?i)<\s*/\s*(system|prompt|instruction|context)\s*>", "[/filtered_tag]", cleaned)
+        return cleaned.strip()
 
     def search(
         self,
         ticker: str,
         query: str = "",
-        top_k: int = 3
+        top_k: int = 3,
+        as_of_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Vector similarity search filtered by ticker.
-        Prevents look-ahead cross-ticker contamination by isolating candidates strictly to ticker.
+        Retrieves matching documents for a ticker with vector relevance scoring and extracted quotes.
+        Supports strict point-in-time filtering via `as_of_date` (YYYY-MM-DD) to prevent look-ahead bias.
         """
         start_time = time.perf_counter()
         ticker_up = ticker.upper()
 
-        # Step 1: Pre-filter by ticker (eliminates cross-company leakage)
-        candidate_indices = [
-            i for i, d in enumerate(self.documents) if d.get("ticker") == ticker_up
-        ]
+        # Step 1: Pre-filter by ticker and point-in-time date constraint
+        candidate_indices = []
+        for i, d in enumerate(self.documents):
+            if d.get("ticker") == ticker_up:
+                if as_of_date:
+                    doc_date = d.get("filing_date") or d.get("date", "2024-01-01")
+                    if doc_date > as_of_date:
+                        continue  # strictly eliminate forward corporate filing leaks!
+                candidate_indices.append(i)
 
         if not candidate_indices:
             elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
@@ -162,7 +175,7 @@ class VectorStore:
                 "citations": [],
                 "documents_scanned": 0,
                 "retrieval_ms": elapsed_ms,
-                "status": "UNCATALOGED_CORPUS"
+                "status": "UNCATALOGED_CORPUS" if not as_of_date else "NO_POINT_IN_TIME_FILINGS"
             }
 
         if self._vectorizer is None or self._document_vectors is None:
@@ -185,7 +198,6 @@ class VectorStore:
             # Ensure between 0.50 and 0.98
             combined_relevance = max(0.50, min(0.98, combined_relevance))
 
-            # Extract fiscal period and page number if not present
             fiscal = doc.get("fiscal_period")
             if not fiscal:
                 for fp in ["Q1 FY26", "Q2 FY26", "Q3 FY26", "Q4 FY26", "Q1 FY25", "Q2 FY25", "Q3 FY25", "Q4 FY25", "FY26", "FY25"]:
@@ -232,7 +244,8 @@ class VectorStore:
             "citations": top_results,
             "documents_scanned": len(candidate_indices),
             "retrieval_ms": elapsed_ms,
-            "status": "CATALOGED"
+            "status": "SUCCESS",
+            "as_of_date_applied": as_of_date
         }
 
     def add_document(
@@ -242,27 +255,22 @@ class VectorStore:
         section: str,
         content: str,
         source_type: str = "USER_UPLOAD",
-        fiscal_period: str = "Q3 FY26"
+        fiscal_period: str = "FY26",
+        filing_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Ingests user-uploaded or dynamically parsed documents into the vector store.
-        Sanitizes text, creates chunk embeddings, and persists to disk.
+        Thread-safely ingests a new document excerpt into the vector store.
         """
         sanitized = self.sanitize_text(content)
-        ticker_up = ticker.upper()
+        if not sanitized:
+            raise ValueError("Document content cannot be empty")
 
-        # Semantic sentiment detection for financial chunk
+        ticker_up = ticker.strip().upper()
+
+        # Heuristic polarity classification
+        pos_words = ["growth", "record", "expansion", "profit", "surpassed", "strong", "cash", "dividend", "revival"]
+        neg_words = ["debt", "contraction", "headwind", "headwinds", "decline", "pressure", "drop", "cut", "drain", "loss"]
         lower = sanitized.lower()
-        pos_words = [
-            "growth", "record", "expansion", "profit", "surpassed", "surpassing",
-            "strong", "cash", "dividend", "revival", "rose", "climbing", "climb",
-            "robust", "increase", "operating income", "accelerated", "healthy"
-        ]
-        neg_words = [
-            "debt", "contraction", "headwind", "headwinds", "decline", "pressure",
-            "drop", "cut", "drain", "loss", "fell", "decrease", "compress", "compression"
-        ]
-
         pos_count = sum(1 for w in pos_words if w in lower)
         neg_count = sum(1 for w in neg_words if w in lower)
 
@@ -274,6 +282,7 @@ class VectorStore:
             sentiment = "neutral"
 
         doc_id = f"{ticker_up.lower()}-upload-{int(time.time())}-{len(self.documents)}"
+        actual_date = filing_date or time.strftime("%Y-%m-%d")
 
         new_doc = {
             "id": doc_id,
@@ -281,6 +290,7 @@ class VectorStore:
             "document_title": document_title.strip() or "User Uploaded Corporate Filing",
             "source_type": source_type,
             "fiscal_period": fiscal_period,
+            "filing_date": actual_date,
             "section": section.strip() or "Uploaded Excerpt",
             "excerpt": sanitized,
             "sentiment": sentiment,
@@ -297,6 +307,7 @@ class VectorStore:
             "ticker": ticker_up,
             "document_title": new_doc["document_title"],
             "sentiment": sentiment,
+            "filing_date": actual_date,
             "status": "INDEXED"
         }
 
@@ -308,7 +319,7 @@ class VectorStore:
     ) -> List[Dict[str, Any]]:
         """
         Extracts pages from uploaded PDF bytes via PyMuPDF, chunks text,
-        and adds them as indexed citations.
+        and adds them as indexed citations under safe limits.
         """
         if not HAS_PYMUPDF:
             raise RuntimeError("PyMuPDF (fitz) is not installed for PDF ingestion.")
@@ -316,17 +327,17 @@ class VectorStore:
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         added_chunks = []
 
-        for page_num in range(min(len(doc), 20)):  # Cap at 20 pages
+        # Cap at 25 pages to avoid memory/CPU exhaustion
+        for page_num in range(min(len(doc), 25)):
             page = doc[page_num]
             text = page.get_text()
             if len(text.strip()) > 50:
-                # Chunk into sections if long
                 section_name = f"Item/Page {page_num + 1}"
                 res = self.add_document(
                     ticker=ticker,
                     document_title=document_title,
                     section=section_name,
-                    content=text[:1200],  # first 1200 chars per page
+                    content=text[:1500],
                     source_type="PDF_UPLOAD"
                 )
                 added_chunks.append(res)
@@ -339,7 +350,6 @@ class VectorStore:
         if ticker_up in self.sentiment_timelines:
             return self.sentiment_timelines[ticker_up]
 
-        # Calculate dynamic timeline from ingested documents
         matched = [d for d in self.documents if d.get("ticker") == ticker_up]
         if matched:
             pos = sum(1 for d in matched if d.get("sentiment") == "positive")

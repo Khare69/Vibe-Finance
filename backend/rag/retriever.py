@@ -18,11 +18,18 @@ class RAGRetriever:
     def documents(self):
         return self.store.documents
 
-    def search(self, ticker: str, query: str = "", top_k: int = 3) -> Dict[str, Any]:
+    def search(
+        self,
+        ticker: str,
+        query: str = "",
+        top_k: int = 3,
+        as_of_date: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Retrieves matching documents for a ticker with vector relevance scoring and extracted quotes.
+        Supports point-in-time date constraint via as_of_date.
         """
-        return self.store.search(ticker=ticker, query=query, top_k=top_k)
+        return self.store.search(ticker=ticker, query=query, top_k=top_k, as_of_date=as_of_date)
 
     def add_document(
         self,

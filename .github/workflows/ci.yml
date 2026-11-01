@@ -40,6 +40,12 @@ jobs:
           pip install pip-audit
           pip-audit --desc on || true
 
+      - name: Execute Mathematical Invariants & Property Tests
+        env:
+          PYTHONPATH: .
+        run: |
+          python -u backend/tests/test_mathematical_properties.py
+
       - name: Execute End-to-End Test Suite (All 21 Scenarios)
         env:
           PYTHONPATH: .

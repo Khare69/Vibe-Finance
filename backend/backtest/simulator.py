@@ -171,8 +171,8 @@ class BacktestSimulator:
             return_1m_pct=ret_1m
         )
 
-        # Point-in-time fundamental evidence from vector store
-        rag_search = vector_store.search(ticker_up, "revenue earnings capex debt margins", top_k=2)
+        # Point-in-time fundamental evidence from vector store (strictly no look-ahead into future filings)
+        rag_search = vector_store.search(ticker_up, "revenue earnings capex debt margins", top_k=2, as_of_date=actual_entry_date)
         citations = rag_search.get("citations", [])
 
         # Calculate point-in-time fundamental score
