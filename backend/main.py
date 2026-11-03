@@ -117,7 +117,11 @@ class SimulateTradeRequest(BaseModel):
 
 class BacktestRequest(BaseModel):
     ticker: str = Field(default="NVDA", min_length=1, max_length=20, pattern=r"^[A-Za-z0-9\.\^]{1,20}$")
-    historical_date: str = Field(default="2024-10-15", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    historical_date: Optional[str] = Field(default="2024-10-15", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    simulation_mode: Optional[str] = Field(default="single_window", pattern=r"^(single_window|rolling_walk_forward)$")
+    num_windows: Optional[int] = Field(default=4, ge=2, le=8)
+    window_days: Optional[int] = Field(default=45, ge=15, le=120)
+    slippage_bps: Optional[float] = Field(default=10.0, ge=0.0, le=100.0)
     holding_days: Optional[int] = Field(default=90, ge=7, le=365)
 
 class StressTestRequest(BaseModel):
@@ -329,6 +333,14 @@ async def run_portfolio_stress_test(req: StressTestRequest):
 @app.post("/api/backtest")
 async def run_backtest(req: BacktestRequest):
     safe_ticker = sanitize_ticker(req.ticker)
+    if req.simulation_mode == "rolling_walk_forward":
+        return await asyncio.to_thread(
+            backtest_simulator.simulate_rolling_walk_forward,
+            ticker=safe_ticker,
+            num_windows=req.num_windows or 4,
+            window_days=req.window_days or 45,
+            slippage_bps=req.slippage_bps if req.slippage_bps is not None else 10.0
+        )
     return await asyncio.to_thread(
         backtest_simulator.simulate,
         ticker=safe_ticker,

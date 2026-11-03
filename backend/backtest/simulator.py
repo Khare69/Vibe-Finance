@@ -8,6 +8,7 @@ import yfinance as yf
 
 from backend.data.market_service import market_service
 from backend.rag.vector_store import vector_store
+from backend.agents.fincom_protocol import FinComProtocol
 
 
 class BacktestSimulator:
@@ -105,7 +106,8 @@ class BacktestSimulator:
         self,
         ticker: str,
         historical_date: str = "2025-10-15",
-        holding_days: int = 90
+        holding_days: int = 90,
+        slippage_bps: float = 10.0
     ) -> Dict[str, Any]:
         """
         Executes a walk-forward historical simulation.
@@ -275,6 +277,18 @@ class BacktestSimulator:
         else:
             cagr_pct = actual_return_pct
 
+        # Calmar Ratio: CAGR / abs(Max Drawdown)
+        calmar = round(abs(cagr_pct / max_drawdown_pct), 2) if abs(max_drawdown_pct) > 0.01 else 0.0
+
+        # Profit Factor: sum(gains) / sum(abs(losses))
+        pos_gains = sum(r for r in daily_returns if r > 0)
+        neg_losses = sum(abs(r) for r in daily_returns if r < 0)
+        profit_factor = round(pos_gains / neg_losses, 2) if neg_losses > 1e-6 else (round(pos_gains * 100, 2) if pos_gains > 0 else 1.0)
+
+        # Slippage & Transaction Costs
+        slippage_drag_pct = round((slippage_bps / 10000.0) * 100.0, 3)
+        net_return_pct = round(actual_return_pct - slippage_drag_pct, 2)
+
         # Benchmark Alpha Comparison (Nifty 50 or S&P 500)
         bench_name, bench_ret_pct = self._get_benchmark_return(
             is_inr=is_inr,
@@ -282,6 +296,14 @@ class BacktestSimulator:
             end_date=actual_exit_date
         )
         alpha_pct = round(actual_return_pct - bench_ret_pct, 2)
+
+        # Information Ratio & Tracking Error
+        bench_daily_ret = (bench_ret_pct / max(len(daily_returns), 1)) / 100.0
+        tracking_diffs = [r - bench_daily_ret for r in daily_returns]
+        tracking_error_pct = round(float(np.std(tracking_diffs) * math.sqrt(252) * 100.0), 2) if len(daily_returns) > 2 else 0.0
+        information_ratio = round(
+            float((np.mean(tracking_diffs) / np.std(tracking_diffs)) * math.sqrt(252)), 2
+        ) if (len(daily_returns) > 2 and np.std(tracking_diffs) > 1e-6) else 0.0
 
         # Win rate over individual daily trajectory periods
         profitable_days = sum(1 for pt in trajectory if pt["return_pct"] > 0)
@@ -324,6 +346,12 @@ class BacktestSimulator:
                 "max_drawdown_pct": max_drawdown_pct,
                 "sharpe_ratio": sharpe,
                 "sortino_ratio": sortino,
+                "calmar_ratio": calmar,
+                "profit_factor": profit_factor,
+                "information_ratio": information_ratio,
+                "tracking_error_pct": tracking_error_pct,
+                "slippage_bps": slippage_bps,
+                "net_return_pct": net_return_pct,
                 "annualized_volatility_pct": ann_volatility_pct,
                 "benchmark_name": bench_name,
                 "benchmark_return_pct": bench_ret_pct,
@@ -380,6 +408,12 @@ class BacktestSimulator:
                 "max_drawdown_pct": 0.0,
                 "sharpe_ratio": 0.0,
                 "sortino_ratio": 0.0,
+                "calmar_ratio": 0.0,
+                "profit_factor": 1.0,
+                "information_ratio": 0.0,
+                "tracking_error_pct": 0.0,
+                "slippage_bps": 10.0,
+                "net_return_pct": 0.0,
                 "annualized_volatility_pct": 0.0,
                 "benchmark_name": "S&P 500" if ticker in ["NVDA", "AAPL", "TSLA"] else "NIFTY 50",
                 "benchmark_return_pct": 0.0,
@@ -395,6 +429,325 @@ class BacktestSimulator:
             },
             "trajectory": [],
             "reasoning_snapshot": f"Historical OHLCV price series could not be retrieved from Yahoo Finance for {ticker} on {historical_date}. Fallback baseline returned with zero fabricated alpha or returns."
+        }
+
+    def simulate_rolling_walk_forward(
+        self,
+        ticker: str,
+        num_windows: int = 4,
+        window_days: int = 45,
+        slippage_bps: float = 10.0
+    ) -> Dict[str, Any]:
+        """
+        Executes an institutional-grade multi-window rolling walk-forward backtest.
+        Evaluates point-in-time multi-agent recommendations across sequential rolling windows,
+        measuring strategy compounding, recommendation accuracy/hit-rate, benchmark alpha,
+        and transaction cost drag.
+        """
+        ticker_up = ticker.upper()
+        df = self._get_historical_series(ticker_up)
+
+        if df is None or df.empty or len(df) < 50:
+            return self._fallback_rolling_simulation(ticker_up, num_windows, window_days, slippage_bps)
+
+        is_inr = ticker_up in ["RELIANCE", "TCS", "INFY", "HDFCBANK"] or ticker_up.endswith(".NS") or ticker_up.endswith(".BO")
+        dates = [d.strftime("%Y-%m-%d") for d in df.index]
+        closes = [float(x) for x in df["Close"].dropna()]
+        total_bars = len(dates)
+
+        # Warmup requirements: minimum 30 bars prior to first window
+        min_warmup = 30
+        trading_days = max(10, int(window_days * (5.0 / 7.0)))
+
+        # Ensure windows fit within historical range
+        available_span = total_bars - min_warmup
+        if available_span < num_windows * trading_days:
+            trading_days = max(8, available_span // num_windows)
+            num_windows = max(2, min(num_windows, available_span // trading_days))
+
+        start_base_idx = total_bars - (num_windows * trading_days)
+        if start_base_idx < min_warmup:
+            start_base_idx = min_warmup
+
+        windows: List[Dict[str, Any]] = []
+        cum_strat_factor = 1.0
+        cum_asset_factor = 1.0
+        cum_bench_factor = 1.0
+
+        all_strat_daily_returns: List[float] = []
+        all_bench_daily_returns: List[float] = []
+        equity_curve: List[Dict[str, Any]] = []
+
+        total_slippage_drag = 0.0
+
+        for w_idx in range(num_windows):
+            w_entry_idx = start_base_idx + (w_idx * trading_days)
+            w_exit_idx = min(start_base_idx + ((w_idx + 1) * trading_days), total_bars - 1)
+            if w_exit_idx <= w_entry_idx:
+                continue
+
+            w_entry_date = dates[w_entry_idx]
+            w_exit_date = dates[w_exit_idx]
+
+            # 1. Point-in-Time Technical & Quantitative State
+            prior_closes = closes[:w_entry_idx + 1]
+            entry_price = round(prior_closes[-1], 2)
+            exit_price = round(closes[w_exit_idx], 2)
+
+            rsi = market_service.calculate_rsi(prior_closes, 14)
+            sma_50 = market_service.calculate_sma(prior_closes, 50)
+            sma_200 = market_service.calculate_sma(prior_closes, 200)
+            macd = market_service.calculate_macd(prior_closes, 12, 26, 9)
+
+            ret_1m = 0.0
+            if len(prior_closes) >= 22:
+                ret_1m = round(((entry_price - prior_closes[-22]) / prior_closes[-22]) * 100, 2)
+
+            quant_score = market_service.calculate_momentum_score(
+                price=entry_price,
+                sma_50=sma_50,
+                sma_200=sma_200,
+                rsi=rsi,
+                macd_hist=macd["hist"],
+                return_1m_pct=ret_1m
+            )
+
+            # 2. Point-in-Time Fundamental Evidence (Zero Look-Ahead)
+            rag_search = vector_store.search(ticker_up, "revenue earnings capex debt margins", top_k=2, as_of_date=w_entry_date)
+            citations = rag_search.get("citations", [])
+
+            pos_terms = ["growth", "record", "expansion", "profit", "surpassed", "strong", "cash", "dividend", "revival"]
+            neg_terms = ["debt", "contraction", "headwind", "headwinds", "pressure", "drop", "cut", "drain", "loss"]
+
+            rag_score = 50
+            for c in citations:
+                ex = c.get("excerpt", "").lower()
+                pos = sum(1 for w in pos_terms if w in ex)
+                neg = sum(1 for w in neg_terms if w in ex)
+                if c.get("sentiment") == "positive" or pos > neg:
+                    rag_score += 15
+                elif c.get("sentiment") == "negative" or neg > pos:
+                    rag_score -= 15
+            rag_score = max(20, min(95, rag_score))
+
+            # 3. FinCom Consensus & Safe Abstention Check
+            divergence = FinComProtocol.calculate_divergence(quant_score, rag_score)
+            if divergence >= 40.0 and ((quant_score >= 60 and rag_score <= 40) or (quant_score <= 40 and rag_score >= 60)):
+                recommendation = "ABSTAIN"
+            elif quant_score >= 68 and rag_score >= 60:
+                recommendation = "STRONG_BUY"
+            elif quant_score >= 58 and rag_score >= 50:
+                recommendation = "BUY"
+            elif quant_score >= 65 and rag_score <= 45:
+                recommendation = "CAUTIOUS_ACCUMULATE"
+            elif quant_score <= 38 or rag_score <= 32:
+                recommendation = "TRIM" if quant_score > 30 else "SELL"
+            else:
+                recommendation = "HOLD"
+
+            # 4. Forward Window Realized Returns & Benchmark
+            gross_asset_ret = round(((exit_price - entry_price) / entry_price) * 100.0, 2)
+            slip_pct = round((slippage_bps / 10000.0) * 100.0, 3)
+            net_asset_ret = round(gross_asset_ret - slip_pct, 2)
+            total_slippage_drag += slip_pct
+
+            bench_name, bench_ret = self._get_benchmark_return(is_inr, w_entry_date, w_exit_date)
+
+            # Strategy Participation Weighting
+            rf_window = round((0.05 * (trading_days / 252.0)) * 100.0, 2)
+            if recommendation in ["STRONG_BUY", "BUY"]:
+                strat_ret = net_asset_ret
+            elif recommendation == "CAUTIOUS_ACCUMULATE":
+                strat_ret = round((0.60 * net_asset_ret) + (0.40 * rf_window), 2)
+            elif recommendation in ["HOLD", "ABSTAIN"]:
+                strat_ret = rf_window
+            else:  # TRIM or SELL
+                strat_ret = round(max(0.0, -0.20 * gross_asset_ret) + (0.80 * rf_window), 2)
+
+            # Directional Hit Determination
+            if recommendation in ["STRONG_BUY", "BUY", "CAUTIOUS_ACCUMULATE"]:
+                is_hit = gross_asset_ret > 0
+            elif recommendation in ["TRIM", "SELL"]:
+                is_hit = gross_asset_ret <= 0
+            else:
+                is_hit = abs(gross_asset_ret) <= 5.0 or (strat_ret >= net_asset_ret)
+
+            # Daily return tracking for this window
+            window_slice = df.iloc[w_entry_idx:w_exit_idx + 1]
+            w_closes = [float(x) for x in window_slice["Close"].dropna()]
+
+            for d_idx in range(1, len(w_closes)):
+                d_ret = (w_closes[d_idx] - w_closes[d_idx - 1]) / w_closes[d_idx - 1]
+                if recommendation in ["STRONG_BUY", "BUY"]:
+                    all_strat_daily_returns.append(d_ret)
+                elif recommendation == "CAUTIOUS_ACCUMULATE":
+                    all_strat_daily_returns.append(d_ret * 0.6)
+                else:
+                    all_strat_daily_returns.append(0.05 / 252.0)
+                all_bench_daily_returns.append((bench_ret / len(w_closes)) / 100.0)
+
+            cum_strat_factor *= (1.0 + strat_ret / 100.0)
+            cum_asset_factor *= (1.0 + gross_asset_ret / 100.0)
+            cum_bench_factor *= (1.0 + bench_ret / 100.0)
+
+            equity_curve.append({
+                "window": w_idx + 1,
+                "date": w_exit_date,
+                "strategy_equity": round(cum_strat_factor * 100.0, 2),
+                "asset_equity": round(cum_asset_factor * 100.0, 2),
+                "benchmark_equity": round(cum_bench_factor * 100.0, 2)
+            })
+
+            windows.append({
+                "window_index": w_idx + 1,
+                "entry_date": w_entry_date,
+                "exit_date": w_exit_date,
+                "holding_days": w_exit_idx - w_entry_idx,
+                "entry_price": entry_price,
+                "exit_price": exit_price,
+                "recommendation": recommendation,
+                "quant_score": quant_score,
+                "rag_score": rag_score,
+                "divergence": divergence,
+                "asset_return_pct": gross_asset_ret,
+                "strategy_return_pct": strat_ret,
+                "benchmark_return_pct": bench_ret,
+                "alpha_pct": round(strat_ret - bench_ret, 2),
+                "is_hit": is_hit
+            })
+
+        cum_strategy_return = round((cum_strat_factor - 1.0) * 100.0, 2)
+        cum_asset_return = round((cum_asset_factor - 1.0) * 100.0, 2)
+        cum_benchmark_return = round((cum_bench_factor - 1.0) * 100.0, 2)
+        cum_alpha = round(cum_strategy_return - cum_benchmark_return, 2)
+
+        hit_count = sum(1 for w in windows if w["is_hit"])
+        hit_rate_pct = round((hit_count / len(windows)) * 100.0, 1) if windows else 0.0
+
+        # Multi-window risk metrics
+        strat_returns = all_strat_daily_returns if all_strat_daily_returns else [0.0]
+        mean_strat = float(np.mean(strat_returns))
+        std_strat = float(np.std(strat_returns))
+
+        sharpe = round(
+            float((mean_strat / std_strat) * math.sqrt(252)), 2
+        ) if std_strat > 1e-6 else 0.0
+
+        downside_diffs = [min(0.0, r) for r in strat_returns]
+        downside_std = math.sqrt(
+            sum(d ** 2 for d in downside_diffs) / len(downside_diffs)
+        ) if downside_diffs else 0.0
+        sortino = round(
+            float((mean_strat / downside_std) * math.sqrt(252)), 2
+        ) if downside_std > 1e-6 else (sharpe if sharpe > 0 else 0.0)
+
+        # Max Drawdown across equity curve
+        peak_eq = 100.0
+        max_eq_dd = 0.0
+        for pt in equity_curve:
+            eq = pt["strategy_equity"]
+            if eq > peak_eq:
+                peak_eq = eq
+            dd = (eq - peak_eq) / peak_eq if peak_eq > 0 else 0.0
+            if dd < max_eq_dd:
+                max_eq_dd = dd
+        max_drawdown_pct = round(max_eq_dd * 100.0, 2)
+
+        # CAGR across all windows
+        total_days = sum(w["holding_days"] for w in windows)
+        years = total_days / 252.0
+        if years > 0.05 and cum_strat_factor > 0:
+            cagr_pct = round(((cum_strat_factor ** (1.0 / years)) - 1.0) * 100.0, 2)
+        else:
+            cagr_pct = cum_strategy_return
+
+        calmar = round(abs(cagr_pct / max_drawdown_pct), 2) if abs(max_drawdown_pct) > 0.01 else 0.0
+
+        pos_gains = sum(r for r in strat_returns if r > 0)
+        neg_losses = sum(abs(r) for r in strat_returns if r < 0)
+        profit_factor = round(pos_gains / neg_losses, 2) if neg_losses > 1e-6 else 1.0
+
+        tracking_diffs = [
+            strat_returns[i] - all_bench_daily_returns[i]
+            for i in range(min(len(strat_returns), len(all_bench_daily_returns)))
+        ]
+        info_ratio = round(
+            float((np.mean(tracking_diffs) / np.std(tracking_diffs)) * math.sqrt(252)), 2
+        ) if (len(tracking_diffs) > 2 and np.std(tracking_diffs) > 1e-6) else 0.0
+
+        return {
+            "simulation_mode": "rolling_walk_forward",
+            "ticker": ticker_up,
+            "status": "SUCCESS",
+            "is_fallback": False,
+            "provenance": {
+                "source": "YAHOO_FINANCE_HISTORICAL",
+                "is_live": True,
+                "method": "rolling_walk_forward_v2",
+                "start_date": windows[0]["entry_date"] if windows else "N/A",
+                "end_date": windows[-1]["exit_date"] if windows else "N/A",
+                "windows_count": len(windows)
+            },
+            "cumulative_metrics": {
+                "strategy_return_pct": cum_strategy_return,
+                "buy_and_hold_return_pct": cum_asset_return,
+                "benchmark_return_pct": cum_benchmark_return,
+                "benchmark_name": bench_name,
+                "cumulative_alpha_pct": cum_alpha,
+                "recommendation_hit_rate_pct": hit_rate_pct,
+                "hit_count": hit_count,
+                "total_windows": len(windows),
+                "cagr_pct": cagr_pct,
+                "max_drawdown_pct": max_drawdown_pct,
+                "sharpe_ratio": sharpe,
+                "sortino_ratio": sortino,
+                "calmar_ratio": calmar,
+                "profit_factor": profit_factor,
+                "information_ratio": info_ratio,
+                "total_slippage_drag_pct": round(total_slippage_drag, 2)
+            },
+            "windows": windows,
+            "equity_curve": equity_curve,
+            "summary_verdict": (
+                f"Rolling Walk-Forward v2 over {len(windows)} sequential windows achieved a cumulative "
+                f"strategy return of {cum_strategy_return:+.2f}% (Alpha: {cum_alpha:+.2f}% vs {bench_name}), "
+                f"with a recommendation hit-rate of {hit_rate_pct}% and Sharpe of {sharpe:.2f}."
+            )
+        }
+
+    def _fallback_rolling_simulation(self, ticker: str, num_windows: int, window_days: int, slippage_bps: float) -> Dict[str, Any]:
+        return {
+            "simulation_mode": "rolling_walk_forward",
+            "ticker": ticker,
+            "status": "FALLBACK_INSUFFICIENT_HISTORY",
+            "is_fallback": True,
+            "provenance": {
+                "source": "OFFLINE_FALLBACK",
+                "is_live": False,
+                "method": "rolling_walk_forward_v2",
+                "disclaimer": f"Historical OHLCV data was unavailable for {ticker}. Fallback baseline returned with zero fabricated alpha."
+            },
+            "cumulative_metrics": {
+                "strategy_return_pct": 0.0,
+                "buy_and_hold_return_pct": 0.0,
+                "benchmark_return_pct": 0.0,
+                "benchmark_name": "S&P 500" if ticker in ["NVDA", "AAPL", "TSLA"] else "NIFTY 50",
+                "cumulative_alpha_pct": 0.0,
+                "recommendation_hit_rate_pct": 0.0,
+                "hit_count": 0,
+                "total_windows": num_windows,
+                "cagr_pct": 0.0,
+                "max_drawdown_pct": 0.0,
+                "sharpe_ratio": 0.0,
+                "sortino_ratio": 0.0,
+                "calmar_ratio": 0.0,
+                "profit_factor": 1.0,
+                "information_ratio": 0.0,
+                "total_slippage_drag_pct": 0.0
+            },
+            "windows": [],
+            "equity_curve": [],
+            "summary_verdict": f"Historical data was unavailable for {ticker}. Fallback baseline returned with zero fabricated metrics."
         }
 
 

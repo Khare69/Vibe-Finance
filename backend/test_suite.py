@@ -379,7 +379,21 @@ def run_all_tests():
     print("22. FinCom Disagree-or-Commit Protocol & FinMAN Sandbox Passed: Formula AST security, divergence decay, behavioral risk hard vetoes, and safe abstention verified.")
 
     print("\n==========================================")
-    print("SUCCESS: ALL 22 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    # 23. Test Institutional Walk-Forward Backtesting v2
+    from backend.tests.test_walk_forward_v2 import (
+        test_single_window_institutional_metrics,
+        test_rolling_walk_forward_multi_window_execution,
+        test_rolling_walk_forward_indian_asset,
+        test_rolling_walk_forward_fallback_honesty
+    )
+    test_single_window_institutional_metrics()
+    test_rolling_walk_forward_multi_window_execution()
+    test_rolling_walk_forward_indian_asset()
+    test_rolling_walk_forward_fallback_honesty()
+    print("23. Institutional Walk-Forward Backtesting v2 Passed: Calmar/Profit Factor, slippage modeling, multi-window compounding, hit-rate, and benchmark alpha verified.")
+
+    print("\n==========================================")
+    print("SUCCESS: ALL 23 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

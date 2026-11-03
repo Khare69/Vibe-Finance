@@ -292,7 +292,15 @@ export async function getPortfolio() {
   }
 }
 
-export async function runBacktest({ ticker, historicalDate, holdingDays = 90 }) {
+export async function runBacktest({
+  ticker,
+  historicalDate,
+  holdingDays = 90,
+  simulationMode = 'single_window',
+  numWindows = 4,
+  windowDays = 45,
+  slippageBps = 10.0,
+}) {
   try {
     const res = await fetch(`${BASE_URL}/api/backtest`, {
       method: 'POST',
@@ -301,6 +309,10 @@ export async function runBacktest({ ticker, historicalDate, holdingDays = 90 }) 
         ticker,
         historical_date: historicalDate,
         holding_days: holdingDays,
+        simulation_mode: simulationMode,
+        num_windows: numWindows,
+        window_days: windowDays,
+        slippage_bps: slippageBps,
       }),
     });
     if (!res.ok) throw new Error('Backtest error');
