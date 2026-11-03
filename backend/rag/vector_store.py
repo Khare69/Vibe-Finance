@@ -15,6 +15,12 @@ except ImportError:
     HAS_PYMUPDF = False
 
 from backend.rag.corpus import RAG_DOCUMENTS, SENTIMENT_TIMELINES
+from backend.rag.bm25 import (
+    BM25Okapi,
+    tokenize_financial_text,
+    ReciprocalRankFusion,
+    compute_convex_hybrid_score
+)
 
 
 # Additional initial regulatory filing records (including HDFCBANK)
@@ -60,10 +66,12 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
 
 class VectorStore:
     """
-    Vector Knowledge Base Engine for corporate filings and earnings transcripts.
-    Implements TF-IDF n-gram vectorization, normalized cosine similarity search,
-    ticker pre-filtering, strict point-in-time isolation (zero future look-ahead),
-    thread-safe atomic document persistence, and anti-DoS chunk/size caps.
+    Hybrid Knowledge Base Engine for corporate filings and earnings transcripts.
+    Combines BM25 Okapi lexical scoring and Dense TF-IDF vector embeddings
+    via Reciprocal Rank Fusion (RRF) and convex linear weighting.
+    Enforces strict point-in-time isolation (zero future look-ahead),
+    ticker pre-filtering, thread-safe atomic document persistence,
+    and anti-DoS chunk/size caps.
     """
 
     def __init__(self, storage_path: Optional[str] = None):
@@ -73,6 +81,7 @@ class VectorStore:
         self.documents: List[Dict[str, Any]] = []
         self._vectorizer: Optional[TfidfVectorizer] = None
         self._document_vectors: Optional[np.ndarray] = None
+        self._tokenized_corpus: Optional[List[List[str]]] = None
         self.sentiment_timelines = SENTIMENT_TIMELINES
         self._write_lock = threading.Lock()
 
@@ -84,6 +93,12 @@ class VectorStore:
             try:
                 with open(self.storage_path, "r", encoding="utf-8") as f:
                     self.documents = json.load(f)
+                # Ensure additional corpus (e.g. HDFCBANK) is merged if missing
+                existing_ids = {d.get("id") for d in self.documents if d.get("id")}
+                missing = [d for d in ADDITIONAL_CORPUS if d.get("id") not in existing_ids]
+                if missing:
+                    self.documents.extend(missing)
+                    self._save_to_disk()
             except Exception:
                 self.documents = list(RAG_DOCUMENTS) + list(ADDITIONAL_CORPUS)
         else:
@@ -106,11 +121,12 @@ class VectorStore:
                 pass
 
     def _fit_vectorizer(self):
-        """Re-fits the TF-IDF vectorizer over all document texts in the corpus under thread lock."""
+        """Re-fits the TF-IDF vectorizer and tokenized index over all document texts in the corpus under thread lock."""
         with self._write_lock:
             if not self.documents:
                 self._vectorizer = None
                 self._document_vectors = None
+                self._tokenized_corpus = None
                 return
 
             corpus_texts = []
@@ -128,6 +144,7 @@ class VectorStore:
                 sublinear_tf=True
             )
             self._document_vectors = self._vectorizer.fit_transform(corpus_texts)
+            self._tokenized_corpus = [tokenize_financial_text(t) for t in corpus_texts]
 
     def sanitize_text(self, text: str) -> str:
         """
@@ -145,15 +162,18 @@ class VectorStore:
         cleaned = re.sub(r"(?i)<\s*/\s*(system|prompt|instruction|context)\s*>", "[/filtered_tag]", cleaned)
         return cleaned.strip()
 
-    def search(
+    def search_hybrid(
         self,
         ticker: str,
         query: str = "",
         top_k: int = 3,
-        as_of_date: Optional[str] = None
+        as_of_date: Optional[str] = None,
+        alpha: float = 0.5,
+        mode: str = "hybrid"
     ) -> Dict[str, Any]:
         """
-        Retrieves matching documents for a ticker with vector relevance scoring and extracted quotes.
+        Hybrid retrieval engine combining BM25 Okapi lexical scoring and Dense TF-IDF vector embeddings
+        via Reciprocal Rank Fusion (RRF) and convex linear combination.
         Supports strict point-in-time filtering via `as_of_date` (YYYY-MM-DD) to prevent look-ahead bias.
         """
         start_time = time.perf_counter()
@@ -164,7 +184,7 @@ class VectorStore:
         for i, d in enumerate(self.documents):
             if d.get("ticker") == ticker_up:
                 if as_of_date:
-                    doc_date = d.get("filing_date") or d.get("date", "2024-01-01")
+                    doc_date = d.get("filing_date") or d.get("date") or "2026-01-19"
                     if doc_date > as_of_date:
                         continue  # strictly eliminate forward corporate filing leaks!
                 candidate_indices.append(i)
@@ -175,27 +195,51 @@ class VectorStore:
                 "citations": [],
                 "documents_scanned": 0,
                 "retrieval_ms": elapsed_ms,
-                "status": "UNCATALOGED_CORPUS" if not as_of_date else "NO_POINT_IN_TIME_FILINGS"
+                "status": "UNCATALOGED_CORPUS" if not as_of_date else "NO_POINT_IN_TIME_FILINGS",
+                "retrieval_mode": mode.upper()
             }
 
-        if self._vectorizer is None or self._document_vectors is None:
+        if self._vectorizer is None or self._document_vectors is None or self._tokenized_corpus is None:
             self._fit_vectorizer()
 
-        # Step 2: Compute vector similarity
         search_query = query if query.strip() else f"{ticker_up} financial results earnings revenue margin debt capex cash flow"
-        query_vec = self._vectorizer.transform([search_query])
 
-        # Slice candidate vectors
+        # Step 2: Dense Vector Retrieval (TF-IDF Cosine Similarity)
+        query_vec = self._vectorizer.transform([search_query])
         sub_vectors = self._document_vectors[candidate_indices]
-        similarities = cosine_similarity(query_vec, sub_vectors)[0]
+        dense_similarities = cosine_similarity(query_vec, sub_vectors)[0]
+
+        # Step 3: BM25 Lexical Retrieval
+        candidate_tokens = [self._tokenized_corpus[idx] for idx in candidate_indices]
+        bm25_model = BM25Okapi(candidate_tokens, k1=1.5, b=0.75)
+        q_tokens = tokenize_financial_text(query if query.strip() else search_query)
+        bm25_raw_scores = bm25_model.get_scores(q_tokens)
+        max_bm25 = max(bm25_raw_scores) if bm25_raw_scores and max(bm25_raw_scores) > 0 else 1.0
+
+        # Step 4: Rank ordering for Reciprocal Rank Fusion (RRF)
+        dense_order = np.argsort(-dense_similarities).tolist()
+        bm25_order = np.argsort(-np.array(bm25_raw_scores)).tolist()
+
+        dense_rank_map = {local_idx: rank_1b for rank_1b, local_idx in enumerate(dense_order, 1)}
+        bm25_rank_map = {local_idx: rank_1b for rank_1b, local_idx in enumerate(bm25_order, 1)}
+
+        rrf_fused = ReciprocalRankFusion.fuse(bm25_order, dense_order, k_rrf=60)
+        rrf_map = dict(rrf_fused)
 
         scored_results = []
-        for local_idx, sim_score in enumerate(similarities):
+        for local_idx in range(len(candidate_indices)):
             doc = self.documents[candidate_indices[local_idx]]
+            sim_score = float(dense_similarities[local_idx])
+            bm_score = float(bm25_raw_scores[local_idx])
+            norm_bm = (bm_score / max_bm25) if max_bm25 > 0 else 0.0
+            rrf_score = round(float(rrf_map.get(local_idx, 0.0)), 4)
             base_score = doc.get("relevance_base", 0.75)
-            # Combine vector cosine similarity with base quality weighting
-            combined_relevance = round(float(0.6 * sim_score + 0.4 * base_score), 2)
-            # Ensure between 0.50 and 0.98
+
+            # Continuous combined relevance score
+            if max_bm25 > 0 and bm_score > 0:
+                combined_relevance = round(float(alpha * norm_bm + (1.0 - alpha) * sim_score * 0.8 + 0.2 * base_score), 2)
+            else:
+                combined_relevance = round(float(0.6 * sim_score + 0.4 * base_score), 2)
             combined_relevance = max(0.50, min(0.98, combined_relevance))
 
             fiscal = doc.get("fiscal_period")
@@ -226,7 +270,13 @@ class VectorStore:
                 "excerpt": doc.get("excerpt", ""),
                 "full_context": doc.get("full_context") or doc.get("excerpt", ""),
                 "relevance_score": combined_relevance,
-                "similarity_cosine": round(float(sim_score), 3),
+                "similarity_cosine": round(sim_score, 3),
+                "bm25_score": round(bm_score, 3),
+                "hybrid_score": combined_relevance,
+                "rrf_score": rrf_score,
+                "retrieval_method": "HYBRID_BM25_DENSE",
+                "rank_bm25": bm25_rank_map[local_idx],
+                "rank_dense": dense_rank_map[local_idx],
                 "sentiment": doc.get("sentiment", "neutral"),
                 "fiscal_period": fiscal,
                 "filing_date": doc.get("filing_date") or doc.get("date", "2025-10-24"),
@@ -234,10 +284,17 @@ class VectorStore:
                 "keywords": doc.get("keywords", [])
             })
 
-        # Rank by score descending
-        scored_results.sort(key=lambda x: x["relevance_score"], reverse=True)
-        top_results = scored_results[:top_k]
+        # Rank ordering by retrieval mode
+        if mode == "hybrid":
+            scored_results.sort(key=lambda x: (x["rrf_score"], x["relevance_score"]), reverse=True)
+        elif mode == "bm25":
+            scored_results.sort(key=lambda x: (x["bm25_score"], x["similarity_cosine"]), reverse=True)
+        elif mode == "dense":
+            scored_results.sort(key=lambda x: (x["similarity_cosine"], x["relevance_score"]), reverse=True)
+        else:
+            scored_results.sort(key=lambda x: x["relevance_score"], reverse=True)
 
+        top_results = scored_results[:top_k]
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000), 1)
 
         return {
@@ -245,8 +302,29 @@ class VectorStore:
             "documents_scanned": len(candidate_indices),
             "retrieval_ms": elapsed_ms,
             "status": "SUCCESS",
-            "as_of_date_applied": as_of_date
+            "as_of_date_applied": as_of_date,
+            "retrieval_mode": f"HYBRID_BM25_DENSE_{mode.upper()}"
         }
+
+    def search(
+        self,
+        ticker: str,
+        query: str = "",
+        top_k: int = 3,
+        as_of_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Retrieves matching documents for a ticker with hybrid relevance scoring (BM25 + Dense RRF).
+        Supports strict point-in-time filtering via `as_of_date` (YYYY-MM-DD) to prevent look-ahead bias.
+        """
+        return self.search_hybrid(
+            ticker=ticker,
+            query=query,
+            top_k=top_k,
+            as_of_date=as_of_date,
+            alpha=0.5,
+            mode="hybrid"
+        )
 
     def add_document(
         self,

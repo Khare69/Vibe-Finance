@@ -10,14 +10,44 @@ class RAGAgent:
     """
     Fundamental Researcher Agent.
     Retrieves evidence from indexed corporate regulatory filings (SEC 10-K, 10-Q,
-    SEBI disclosures, earnings transcripts) and extracts grounded financial findings
-    using the Gemini LLM client with a deterministic TF-IDF sentiment fallback.
+    SEBI disclosures, earnings transcripts) using Hybrid Retrieval (BM25 lexical
+    + Dense Vector RRF) and extracts grounded financial findings using the Gemini
+    LLM client with a deterministic financial lexicon fallback.
     """
+
+    @staticmethod
+    def _format_citation_items(citations: List[Dict[str, Any]], ticker_up: str) -> List[Dict[str, Any]]:
+        """Encapsulates citation normalization for Evidence Explorer and audit logs."""
+        formatted = []
+        for c in citations:
+            formatted.append({
+                "id": c.get("id", ""),
+                "ticker": c.get("ticker", ticker_up),
+                "document_title": c.get("document_title", "Corporate Filing"),
+                "source_type": c.get("source_type", "REGULATORY_FILING"),
+                "section": c.get("section", "General Section"),
+                "excerpt": c.get("excerpt", ""),
+                "full_context": c.get("full_context") or c.get("excerpt", ""),
+                "relevance_score": c.get("relevance_score", 0.85),
+                "similarity_cosine": c.get("similarity_cosine", 0.80),
+                "bm25_score": c.get("bm25_score", 0.0),
+                "hybrid_score": c.get("hybrid_score", c.get("relevance_score", 0.85)),
+                "rrf_score": c.get("rrf_score", 0.0),
+                "retrieval_method": c.get("retrieval_method", "HYBRID_BM25_DENSE"),
+                "rank_bm25": c.get("rank_bm25", 1),
+                "rank_dense": c.get("rank_dense", 1),
+                "sentiment": c.get("sentiment", "neutral"),
+                "fiscal_period": c.get("fiscal_period", "Q3 FY26"),
+                "filing_date": c.get("filing_date", "2026-01-19"),
+                "page_number": c.get("page_number", 1),
+                "keywords": c.get("keywords", [])
+            })
+        return formatted
 
     def analyze(self, ticker: str, simulated_rag_timeout: bool = False) -> Dict[str, Any]:
         """
         Synchronous interface for fundamental analysis.
-        Retrieves top vector citations and performs extraction.
+        Retrieves top hybrid citations and performs deterministic extraction.
         """
         start_time = time.perf_counter()
         ticker_up = ticker.upper()
@@ -41,7 +71,7 @@ class RAGAgent:
                 }
             }
 
-        # Search Vector Knowledge Base synchronously
+        # Search Vector Knowledge Base synchronously via Hybrid Retrieval
         search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
         search_res = rag_retriever.search(ticker=ticker_up, query=search_query, top_k=3)
         citations = search_res.get("citations", [])
@@ -71,24 +101,7 @@ class RAGAgent:
         score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
 
-        formatted_citations = []
-        for c in citations:
-            formatted_citations.append({
-                "id": c.get("id", ""),
-                "ticker": c.get("ticker", ticker_up),
-                "document_title": c.get("document_title", "Corporate Filing"),
-                "source_type": c.get("source_type", "REGULATORY_FILING"),
-                "section": c.get("section", "General Section"),
-                "excerpt": c.get("excerpt", ""),
-                "full_context": c.get("full_context") or c.get("excerpt", ""),
-                "relevance_score": c.get("relevance_score", 0.85),
-                "similarity_cosine": c.get("similarity_cosine", 0.80),
-                "sentiment": c.get("sentiment", "neutral"),
-                "fiscal_period": c.get("fiscal_period", "Q3 FY26"),
-                "filing_date": c.get("filing_date", "2026-01-19"),
-                "page_number": c.get("page_number", 1),
-                "keywords": c.get("keywords", [])
-            })
+        formatted_citations = self._format_citation_items(citations, ticker_up)
 
         return {
             "name": "Fundamental Researcher",
@@ -101,7 +114,7 @@ class RAGAgent:
             "provenance": {
                 "source": "VECTOR_STORE_FILINGS",
                 "corpus_citations": len(formatted_citations),
-                "method": "tfidf_cosine_sentiment_weighting"
+                "method": "hybrid_bm25_dense_rrf"
             }
         }
 
@@ -132,7 +145,7 @@ class RAGAgent:
                 }
             }
 
-        # 1. Search Vector Knowledge Base non-blockingly via worker thread
+        # 1. Search Vector Knowledge Base non-blockingly via worker thread (Hybrid Retrieval)
         search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
         search_res = await asyncio.to_thread(rag_retriever.search, ticker=ticker_up, query=search_query, top_k=3)
         citations = search_res.get("citations", [])
@@ -162,37 +175,18 @@ class RAGAgent:
         # 2. Asynchronous non-blocking LLM-driven evidence extraction
         llm_analysis = await llm_client.extract_fundamental_evidence_async(ticker=ticker_up, citations=citations)
 
-        extraction_method = "llm_evidence_extraction"
         if llm_analysis:
             score = llm_analysis["score"]
             stance = llm_analysis["stance"]
             key_findings = llm_analysis["key_findings"]
+            extraction_method = "llm_with_hybrid_bm25_dense"
         else:
             # 3. Deterministic Evidence Extraction Engine (Offline Fallback)
             score, stance, key_findings = self._extract_deterministic_evidence(ticker_up, citations)
-            extraction_method = "tfidf_cosine_sentiment_weighting"
+            extraction_method = "hybrid_bm25_dense_rrf"
 
         elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
-
-        # Format citations with rich Evidence Explorer metadata
-        formatted_citations = []
-        for c in citations:
-            formatted_citations.append({
-                "id": c.get("id", ""),
-                "ticker": c.get("ticker", ticker_up),
-                "document_title": c.get("document_title", "Corporate Filing"),
-                "source_type": c.get("source_type", "REGULATORY_FILING"),
-                "section": c.get("section", "General Section"),
-                "excerpt": c.get("excerpt", ""),
-                "full_context": c.get("full_context") or c.get("excerpt", ""),
-                "relevance_score": c.get("relevance_score", 0.85),
-                "similarity_cosine": c.get("similarity_cosine", 0.80),
-                "sentiment": c.get("sentiment", "neutral"),
-                "fiscal_period": c.get("fiscal_period", "Q3 FY26"),
-                "filing_date": c.get("filing_date", "2026-01-19"),
-                "page_number": c.get("page_number", 1),
-                "keywords": c.get("keywords", [])
-            })
+        formatted_citations = self._format_citation_items(citations, ticker_up)
 
         return {
             "name": "Fundamental Researcher",

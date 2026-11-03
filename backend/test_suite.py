@@ -393,7 +393,25 @@ def run_all_tests():
     print("23. Institutional Walk-Forward Backtesting v2 Passed: Calmar/Profit Factor, slippage modeling, multi-window compounding, hit-rate, and benchmark alpha verified.")
 
     print("\n==========================================")
-    print("SUCCESS: ALL 23 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    # 24. Test Hybrid Search (BM25 Okapi + Dense Vector RRF)
+    from backend.tests.test_hybrid_rag import (
+        test_bm25_tokenization_and_scoring,
+        test_reciprocal_rank_fusion,
+        test_exact_financial_term_retrieval,
+        test_point_in_time_hybrid_isolation,
+        test_retrieval_modes_comparison,
+        test_rag_agent_hybrid_provenance
+    )
+    test_bm25_tokenization_and_scoring()
+    test_reciprocal_rank_fusion()
+    test_exact_financial_term_retrieval()
+    test_point_in_time_hybrid_isolation()
+    test_retrieval_modes_comparison()
+    test_rag_agent_hybrid_provenance()
+    print("24. Hybrid Search Passed: BM25 Okapi lexical scoring, Dense Vector RRF fusion, exact term retrieval, point-in-time isolation, and citation explainability verified.")
+
+    print("\n==========================================")
+    print("SUCCESS: ALL 24 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

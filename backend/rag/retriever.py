@@ -7,8 +7,9 @@ from backend.rag.vector_store import vector_store
 class RAGRetriever:
     """
     RAG Retriever for financial filings and earnings transcripts.
-    Delegates to the persistent VectorStore using n-gram TF-IDF vector embeddings
-    and cosine similarity ranking.
+    Delegates to the persistent VectorStore using hybrid retrieval:
+    combining BM25 Okapi lexical scoring and Dense TF-IDF vector embeddings
+    via Reciprocal Rank Fusion (RRF) and convex linear weighting.
     """
 
     def __init__(self):
@@ -26,10 +27,32 @@ class RAGRetriever:
         as_of_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Retrieves matching documents for a ticker with vector relevance scoring and extracted quotes.
+        Retrieves matching documents for a ticker with hybrid relevance scoring (BM25 + Dense RRF).
         Supports point-in-time date constraint via as_of_date.
         """
         return self.store.search(ticker=ticker, query=query, top_k=top_k, as_of_date=as_of_date)
+
+    def search_hybrid(
+        self,
+        ticker: str,
+        query: str = "",
+        top_k: int = 3,
+        as_of_date: Optional[str] = None,
+        alpha: float = 0.5,
+        mode: str = "hybrid"
+    ) -> Dict[str, Any]:
+        """
+        Retrieves matching documents using hybrid BM25 lexical + dense vector RRF ranking.
+        Supports mode in ('hybrid', 'dense', 'bm25').
+        """
+        return self.store.search_hybrid(
+            ticker=ticker,
+            query=query,
+            top_k=top_k,
+            as_of_date=as_of_date,
+            alpha=alpha,
+            mode=mode
+        )
 
     def add_document(
         self,

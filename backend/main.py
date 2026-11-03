@@ -484,6 +484,25 @@ async def upload_rag_file(
         "total_corpus_documents": len(rag_retriever.documents)
     }
 
+@app.get("/api/rag/search")
+async def search_rag_corpus(
+    ticker: str,
+    query: Optional[str] = "",
+    top_k: Optional[int] = 3,
+    as_of_date: Optional[str] = None,
+    mode: Optional[str] = "hybrid"
+):
+    safe_ticker = sanitize_ticker(ticker)
+    clean_query = vector_store.sanitize_text(query or "")
+    return await asyncio.to_thread(
+        rag_retriever.search_hybrid,
+        ticker=safe_ticker,
+        query=clean_query,
+        top_k=top_k or 3,
+        as_of_date=as_of_date,
+        mode=mode or "hybrid"
+    )
+
 @app.get("/api/rag/evaluate")
 async def evaluate_rag_faithfulness():
     """Runs automated RAG evaluation benchmark checking faithfulness, citation relevance, and negative control abstention."""
