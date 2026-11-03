@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+from backend.agents.fincom_protocol import fincom_protocol, FinComProtocol
 
 from backend.agents.llm_client import llm_client
 
@@ -18,7 +20,8 @@ class SynthesisAgent:
         rag_result: Dict[str, Any],
         behavioral_result: Dict[str, Any],
         debate_result: Dict[str, Any],
-        market_data: Dict[str, Any]
+        market_data: Dict[str, Any],
+        user_profile: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         quant_score = quant_result.get("score", 50)
         rag_score = rag_result.get("score", 50)
@@ -93,6 +96,31 @@ class SynthesisAgent:
             final_action = "SELL"
             headline = f"De-risk Position in {ticker}: Elevated Downside Volatility and High Risk Penalties"
 
+        # FinCom Disagree-or-Commit Protocol & Behavioral Risk Hard Veto
+        user_prof = dict(user_profile) if user_profile else {"risk_level": user_risk}
+        fincom_eval = fincom_protocol.evaluate_committee(
+            quant_result=quant_result,
+            rag_result=rag_result,
+            behavioral_result=behavioral_result,
+            market_data=market_data,
+            user_profile=user_prof,
+            proposed_action=final_action,
+            rebuttal_cycle=debate_result.get("debate_cycles", 0),
+            stale_data=(market_data.get("feed_status") == "STALE_FALLBACK_EOD")
+        )
+        fincom_data = fincom_eval.model_dump() if hasattr(fincom_eval, "model_dump") else fincom_eval.dict()
+
+        if fincom_eval.safe_abstention:
+            final_action = "ABSTAIN"
+            headline = f"Safe Abstention on {ticker}: Severe Quant/Fundamental Divergence (Committee Inconclusive)"
+        elif fincom_eval.risk_veto.veto_applied:
+            final_action = fincom_eval.risk_veto.override_action
+            if fincom_eval.risk_veto.max_position_cap_pct:
+                headline = (
+                    f"Position Capped ({fincom_eval.risk_veto.max_position_cap_pct:.1f}% max) on {ticker}: "
+                    f"Behavioral Risk Mandate Overrides Aggressive Action"
+                )
+
         # Dynamically compute macro regime attributes from live computed metrics
         beta = float(market_data.get("beta", 1.0))
         annual_vol = float(market_data.get("annualized_volatility", 0.25))
@@ -143,7 +171,8 @@ class SynthesisAgent:
             "asset_conviction_score": round(asset_conviction_score, 1),
             "rag_timed_out": rag_timed_out,
             "has_disagreement": has_disagreement,
-            "user_risk": user_risk
+            "user_risk": user_risk,
+            "fincom_evaluation": fincom_data
         }
 
     def _build_algorithmic_explanations(self, ticker: str, meta: Dict[str, Any]) -> Dict[str, str]:
@@ -190,11 +219,12 @@ class SynthesisAgent:
         rag_result: Dict[str, Any],
         behavioral_result: Dict[str, Any],
         debate_result: Dict[str, Any],
-        market_data: Dict[str, Any]
+        market_data: Dict[str, Any],
+        user_profile: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Asynchronously synthesizes signals with non-blocking LLM explanation generation."""
         meta = self._calculate_action_and_weights(
-            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data
+            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data, user_profile
         )
 
         llm_exp = await llm_client.generate_synthesis_explanations_async(
@@ -213,6 +243,7 @@ class SynthesisAgent:
             "weight_breakdown": meta["weight_breakdown"],
             "macro_regime": meta["macro_regime"],
             "asset_conviction_score": meta.get("asset_conviction_score"),
+            "fincom_evaluation": meta.get("fincom_evaluation", {}),
             "explain_modes": explain_modes
         }
 
@@ -223,11 +254,12 @@ class SynthesisAgent:
         rag_result: Dict[str, Any],
         behavioral_result: Dict[str, Any],
         debate_result: Dict[str, Any],
-        market_data: Dict[str, Any]
+        market_data: Dict[str, Any],
+        user_profile: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Synchronously synthesizes signals for legacy or test callers."""
         meta = self._calculate_action_and_weights(
-            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data
+            ticker, quant_result, rag_result, behavioral_result, debate_result, market_data, user_profile
         )
 
         llm_exp = llm_client.generate_synthesis_explanations(
@@ -246,6 +278,7 @@ class SynthesisAgent:
             "weight_breakdown": meta["weight_breakdown"],
             "macro_regime": meta["macro_regime"],
             "asset_conviction_score": meta.get("asset_conviction_score"),
+            "fincom_evaluation": meta.get("fincom_evaluation", {}),
             "explain_modes": explain_modes
         }
 

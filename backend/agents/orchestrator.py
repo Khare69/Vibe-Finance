@@ -18,6 +18,7 @@ from backend.agents.quant_agent import quant_agent
 from backend.agents.rag_agent import rag_agent
 from backend.agents.behavioral_agent import behavioral_agent
 from backend.agents.debate_engine import debate_engine
+from backend.agents.fincom_protocol import FinComProtocol, fincom_protocol
 from backend.agents.synthesis_agent import synthesis_agent
 from backend.personalization.profiler import user_profiler
 from backend.observability.audit_logger import audit_logger
@@ -184,7 +185,21 @@ class MultiAgentStateGraph:
 
         # Adjust confidence calibration score slightly to account for rebuttal refinement
         current_conf = state.debate_result.get("confidence_calibration_score", 70)
-        calibrated_conf = min(92, current_conf + 4)
+        quant_score = state.quant_result.get("score", 50)
+        rag_score = state.rag_result.get("score", 50)
+        divergence = FinComProtocol.calculate_divergence(quant_score, rag_score)
+        rebuttal_converged = divergence < FinComProtocol.DIVERGENCE_DISSENSION_THRESHOLD
+
+        conf_eval = FinComProtocol.calibrate_confidence(
+            divergence=divergence,
+            rag_timed_out=state.rag_result.get("timed_out", False),
+            stale_data=state.simulated_stale_data,
+            rebuttal_converged=rebuttal_converged,
+            rebuttal_cycle=state.debate_cycles
+        )
+        calibrated_conf = conf_eval["score"]
+        state.debate_result["confidence_penalties"] = conf_eval["penalties"]
+        state.debate_result["divergence"] = divergence
         state.debate_result["confidence_calibration_score"] = calibrated_conf
 
         rebuttal_turn = {
@@ -212,7 +227,8 @@ class MultiAgentStateGraph:
             rag_result=state.rag_result,
             behavioral_result=state.behavioral_result,
             debate_result=state.debate_result,
-            market_data=state.market_data
+            market_data=state.market_data,
+            user_profile=state.user_profile
         )
         state.sentiment_shift = await asyncio.to_thread(
             rag_retriever.get_sentiment_timeline, state.ticker

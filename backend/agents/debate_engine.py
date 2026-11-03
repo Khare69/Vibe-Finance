@@ -1,6 +1,8 @@
 from typing import Dict, Any, List
 
 from backend.agents.llm_client import llm_client
+from backend.agents.fincom_protocol import fincom_protocol, FinComProtocol
+
 
 
 class DebateEngine:
@@ -25,13 +27,14 @@ class DebateEngine:
         rag_timed_out = rag_result.get("timed_out", False)
         user_profile_name = behavioral_result.get("user_risk_profile", "moderate")
 
+        divergence = FinComProtocol.calculate_divergence(quant_score, rag_score)
         has_disagreement = False
         conflict_msg = "Agents are in general alignment on market signals."
 
         if not rag_timed_out and (
             (quant_stance == "BULLISH" and rag_stance == "BEARISH") or
             (quant_stance == "BEARISH" and rag_stance == "BULLISH") or
-            abs(quant_score - rag_score) >= 25
+            divergence >= FinComProtocol.DIVERGENCE_DISSENSION_THRESHOLD
         ):
             has_disagreement = True
             if quant_stance == "BULLISH" and rag_stance == "BEARISH":
@@ -50,15 +53,13 @@ class DebateEngine:
                     f"and fundamental valuation signals ({rag_score})."
                 )
 
-        if rag_timed_out:
-            base_confidence = 58
-        elif has_disagreement:
-            base_confidence = 63
-        else:
-            base_confidence = 84
-
-        if stale_data:
-            base_confidence = max(40, base_confidence - 20)
+        # Calibrate confidence using formal FinCom mathematical decay
+        conf_eval = FinComProtocol.calibrate_confidence(
+            divergence=divergence,
+            rag_timed_out=rag_timed_out,
+            stale_data=stale_data
+        )
+        base_confidence = conf_eval["score"]
 
         # Resolution summary
         if has_disagreement:
@@ -78,10 +79,33 @@ class DebateEngine:
                 f"strategy on {ticker} aligned with the investor's {user_profile_name} risk profile."
             )
 
+        # Build structured dissensions
+        dissensions = []
+        if has_disagreement and not rag_timed_out:
+            if quant_score > rag_score:
+                dissensions.append({
+                    "dissenting_agent": "Fundamental Researcher",
+                    "opposing_agent": "Quantitative Analyst",
+                    "divergence_score": divergence,
+                    "dissent_rationale": f"Fundamental valuation / filing disclosures ({rag_score}/100) resist momentum exuberance ({quant_score}/100)",
+                    "risk_threshold_condition": f"Divergence {divergence} >= {FinComProtocol.DIVERGENCE_DISSENSION_THRESHOLD}"
+                })
+            else:
+                dissensions.append({
+                    "dissenting_agent": "Quantitative Analyst",
+                    "opposing_agent": "Fundamental Researcher",
+                    "divergence_score": divergence,
+                    "dissent_rationale": f"Technical breakdown and negative volume trend ({quant_score}/100) resist fundamental narrative ({rag_score}/100)",
+                    "risk_threshold_condition": f"Divergence {divergence} >= {FinComProtocol.DIVERGENCE_DISSENSION_THRESHOLD}"
+                })
+
         return {
             "has_disagreement": has_disagreement,
             "quant_vs_rag_conflict": conflict_msg,
             "confidence_calibration_score": base_confidence,
+            "confidence_penalties": conf_eval["penalties"],
+            "divergence": divergence,
+            "dissensions": dissensions,
             "resolution_summary": resolution_summary,
             "user_profile_name": user_profile_name,
             "quant_stance": quant_stance,
@@ -195,6 +219,9 @@ class DebateEngine:
             "has_disagreement": assessment["has_disagreement"],
             "quant_vs_rag_conflict": assessment["quant_vs_rag_conflict"],
             "confidence_calibration_score": assessment["confidence_calibration_score"],
+            "confidence_penalties": assessment.get("confidence_penalties", {}),
+            "divergence": assessment.get("divergence", 0.0),
+            "dissensions": assessment.get("dissensions", []),
             "resolution_summary": assessment["resolution_summary"],
             "dialogue_steps": dialogue_steps
         }
@@ -227,6 +254,9 @@ class DebateEngine:
             "has_disagreement": assessment["has_disagreement"],
             "quant_vs_rag_conflict": assessment["quant_vs_rag_conflict"],
             "confidence_calibration_score": assessment["confidence_calibration_score"],
+            "confidence_penalties": assessment.get("confidence_penalties", {}),
+            "divergence": assessment.get("divergence", 0.0),
+            "dissensions": assessment.get("dissensions", []),
             "resolution_summary": assessment["resolution_summary"],
             "dialogue_steps": dialogue_steps
         }

@@ -234,6 +234,30 @@ export default function MultiAgentDebate({
             </div>
           </div>
         )}
+        {debate?.dissensions && debate.dissensions.length > 0 && (
+          <div className="mt-3 bg-slate-900/90 border border-rose-500/30 rounded-xl p-3 space-y-2">
+            <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-rose-400">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                Formal Dissension Filed under FinCom Protocol
+              </span>
+              <span className="font-mono text-slate-400">&Delta; {debate.divergence} pts</span>
+            </div>
+            {debate.dissensions.map((dis, dIdx) => (
+              <div key={dIdx} className="text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-semibold text-rose-300">
+                    {dis.dissenting_agent} <span className="text-slate-500 font-normal">dissents against</span> {dis.opposing_agent}
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    {dis.risk_threshold_condition}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">{dis.dissent_rationale}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 3 Specialized Agent Cards */}

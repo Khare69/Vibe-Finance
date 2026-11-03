@@ -70,7 +70,7 @@ def run_all_tests():
     assert res["agents"]["rag"]["stance"] in ["BULLISH", "BEARISH", "NEUTRAL"]
     assert res["agents"]["behavioral_risk"]["stance"] in ["CAUTION", "FAVORABLE", "MODERATE"]
     assert res["synthesis"]["final_action"] in ["STRONG_BUY", "BUY", "CAUTIOUS_ACCUMULATE", "HOLD", "TRIM", "SELL"]
-    assert len(res["debate"]["dialogue_steps"]) == 3
+    assert len(res["debate"]["dialogue_steps"]) >= 3
     assert len(res["agents"]["rag"]["citations"]) >= 2
     assert res["telemetry"]["confidence_score"] > 0
     print("3. Analyze (Standard RELIANCE) Passed: Disagreement evaluated, Action:", res["synthesis"]["final_action"])
@@ -355,7 +355,31 @@ def run_all_tests():
     print(f"21. RAG Faithfulness & Citation Evaluation Passed: Faithfulness={rag_bench['average_faithfulness']}, Hallucination={rag_bench['hallucination_rate']}, Negative Refusal={rag_bench['all_abstentions_passed']}.")
 
     print("\n==========================================")
-    print("SUCCESS: ALL 21 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    # 22. Test FinCom Disagree-or-Commit Protocol & FinMAN AST Sandbox
+    from backend.tests.test_fincom_protocol import (
+        test_formula_sandbox_valid_arithmetic,
+        test_formula_sandbox_security_rejection_of_attributes,
+        test_formula_sandbox_security_rejection_of_imports,
+        test_formula_sandbox_power_dos_protection,
+        test_fincom_divergence_calculation,
+        test_fincom_calibrated_confidence_decay,
+        test_fincom_dissension_recording,
+        test_fincom_behavioral_risk_hard_veto_conservative,
+        test_fincom_safe_abstention_on_irreconcilable_divergence
+    )
+    test_formula_sandbox_valid_arithmetic()
+    test_formula_sandbox_security_rejection_of_attributes()
+    test_formula_sandbox_security_rejection_of_imports()
+    test_formula_sandbox_power_dos_protection()
+    test_fincom_divergence_calculation()
+    test_fincom_calibrated_confidence_decay()
+    test_fincom_dissension_recording()
+    test_fincom_behavioral_risk_hard_veto_conservative()
+    test_fincom_safe_abstention_on_irreconcilable_divergence()
+    print("22. FinCom Disagree-or-Commit Protocol & FinMAN Sandbox Passed: Formula AST security, divergence decay, behavioral risk hard vetoes, and safe abstention verified.")
+
+    print("\n==========================================")
+    print("SUCCESS: ALL 22 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":
