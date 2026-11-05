@@ -228,7 +228,42 @@
       "merger synergies",
       "margins"
     ],
-    "relevance_base": 0.93
+    "relevance_base": 0.93,
+    "structured_table": {
+      "title": "HDFC Bank Q3 FY26 Key Financial Metrics",
+      "headers": [
+        "Financial Metric",
+        "Q3 FY26",
+        "Q3 FY25",
+        "YoY Variance"
+      ],
+      "rows": [
+        [
+          "Net Interest Margin (NIM)",
+          "3.45%",
+          "3.34%",
+          "+11 bps"
+        ],
+        [
+          "Total Deposits",
+          "₹25.68 lakh cr",
+          "₹21.98 lakh cr",
+          "+16.8%"
+        ],
+        [
+          "Credit-to-Deposit Ratio",
+          "84.2%",
+          "89.5%",
+          "-530 bps"
+        ],
+        [
+          "Cost-to-Income Ratio",
+          "40.3%",
+          "39.2%",
+          "+110 bps"
+        ]
+      ]
+    }
   },
   {
     "id": "hdfc-cite-2",
@@ -245,7 +280,42 @@
       "credit quality",
       "balance sheet strength"
     ],
-    "relevance_base": 0.91
+    "relevance_base": 0.91,
+    "structured_table": {
+      "title": "Asset Quality & NPA Movement Schedule",
+      "headers": [
+        "Asset Classification",
+        "Current Quarter",
+        "Previous Quarter",
+        "Variance"
+      ],
+      "rows": [
+        [
+          "Gross NPA Ratio (GNPA)",
+          "1.28%",
+          "1.34%",
+          "-6 bps"
+        ],
+        [
+          "Net NPA Ratio (NNPA)",
+          "0.35%",
+          "0.37%",
+          "-2 bps"
+        ],
+        [
+          "Provision Coverage Ratio (PCR)",
+          "74.8%",
+          "73.2%",
+          "+160 bps"
+        ],
+        [
+          "Annualized Slippage Ratio",
+          "1.15%",
+          "1.22%",
+          "-7 bps"
+        ]
+      ]
+    }
   },
   {
     "id": "hdfc-cite-3",
@@ -549,6 +619,22 @@
     "filing_date": "2026-11-03",
     "section": "Item 7 MD&A",
     "excerpt": "Data Center enterprise EPYC processor sales expanded 122% YoY, driving record server market share gains.",
+    "sentiment": "positive",
+    "relevance_base": 0.88,
+    "keywords": [
+      "record"
+    ]
+  },
+  {
+    "id": "amd-upload-1793899600-36",
+    "ticker": "AMD",
+    "document_title": "AMD Form 10-K Annual Report",
+    "source_type": "USER_UPLOAD",
+    "fiscal_period": "FY26",
+    "filing_date": "2026-11-05",
+    "section": "Item 7 MD&A",
+    "excerpt": "Data Center enterprise EPYC processor sales expanded 122% YoY, driving record server market share gains.",
+    "structured_table": null,
     "sentiment": "positive",
     "relevance_base": 0.88,
     "keywords": [

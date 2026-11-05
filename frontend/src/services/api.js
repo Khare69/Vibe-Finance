@@ -409,6 +409,29 @@ export async function uploadRagDocument({ ticker, document_title, section, conte
   }
 }
 
+export async function searchRagCorpus({ ticker, query = '', topK = 3, asOfDate = null, mode = 'hybrid' }) {
+  try {
+    const params = new URLSearchParams({
+      ticker: ticker?.toUpperCase() || 'RELIANCE',
+      query: query || '',
+      top_k: String(topK),
+      mode: mode || 'hybrid',
+    });
+    if (asOfDate) params.append('as_of_date', asOfDate);
+    const res = await fetch(`${BASE_URL}/api/rag/search?${params.toString()}`);
+    if (!res.ok) throw new Error('Search RAG corpus failed');
+    return await res.json();
+  } catch (err) {
+    return {
+      citations: [],
+      documents_scanned: 0,
+      retrieval_ms: 1,
+      status: 'FETCH_ERROR',
+      error: err.message
+    };
+  }
+}
+
 export async function saveDecisionMemo(memo) {
   try {
     const res = await fetch(`${BASE_URL}/api/memos`, {

@@ -185,6 +185,38 @@ export default function RagSourceViewerModal({ citation, isOpen, onClose }) {
                 </p>
               </div>
 
+              {/* Structured Financial Statement Table (2D Alignment) */}
+              {citation.structured_table && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                    <Database className="w-3.5 h-3.5 text-violet-400" />
+                    <span>{citation.structured_table.title || 'Structured Financial Statement Table'}</span>
+                  </div>
+                  <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950 p-2.5">
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="border-b border-slate-800 text-slate-400 font-mono text-[11px]">
+                          {citation.structured_table.headers?.map((h, i) => (
+                            <th key={i} className="py-2 px-3 font-semibold">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-900/60 font-mono text-[11px]">
+                        {citation.structured_table.rows?.map((row, rIdx) => (
+                          <tr key={rIdx} className="hover:bg-slate-900/40 transition-colors">
+                            {row.map((cell, cIdx) => (
+                              <td key={cIdx} className={`py-1.5 px-3 ${cIdx === 0 ? 'font-semibold text-slate-200' : 'text-slate-300'}`}>
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Surrounding Context of Document with In-Page Search */}
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">

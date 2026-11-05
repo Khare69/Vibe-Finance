@@ -21,9 +21,10 @@ from backend.rag.bm25 import (
     ReciprocalRankFusion,
     compute_convex_hybrid_score
 )
+from backend.rag.table_parser import table_parser
 
 
-# Additional initial regulatory filing records (including HDFCBANK)
+# Additional initial regulatory filing records (including HDFCBANK & Structured Financial Tables)
 ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
     {
         "id": "hdfc-cite-1",
@@ -35,7 +36,17 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
         "sentiment": "positive",
         "keywords": ["nim", "deposits", "credit deposit ratio", "merger synergies", "margins"],
         "relevance_base": 0.93,
-        "filing_date": "2026-01-18"
+        "filing_date": "2026-01-18",
+        "structured_table": {
+            "title": "HDFC Bank Q3 FY26 Key Financial Metrics",
+            "headers": ["Financial Metric", "Q3 FY26", "Q3 FY25", "YoY Variance"],
+            "rows": [
+                ["Net Interest Margin (NIM)", "3.45%", "3.34%", "+11 bps"],
+                ["Total Deposits", "₹25.68 lakh cr", "₹21.98 lakh cr", "+16.8%"],
+                ["Credit-to-Deposit Ratio", "84.2%", "89.5%", "-530 bps"],
+                ["Cost-to-Income Ratio", "40.3%", "39.2%", "+110 bps"]
+            ]
+        }
     },
     {
         "id": "hdfc-cite-2",
@@ -47,7 +58,17 @@ ADDITIONAL_CORPUS: List[Dict[str, Any]] = [
         "sentiment": "positive",
         "keywords": ["asset quality", "gnpa", "provisions", "credit quality", "balance sheet strength"],
         "relevance_base": 0.91,
-        "filing_date": "2026-01-18"
+        "filing_date": "2026-01-18",
+        "structured_table": {
+            "title": "Asset Quality & NPA Movement Schedule",
+            "headers": ["Asset Classification", "Current Quarter", "Previous Quarter", "Variance"],
+            "rows": [
+                ["Gross NPA Ratio (GNPA)", "1.28%", "1.34%", "-6 bps"],
+                ["Net NPA Ratio (NNPA)", "0.35%", "0.37%", "-2 bps"],
+                ["Provision Coverage Ratio (PCR)", "74.8%", "73.2%", "+160 bps"],
+                ["Annualized Slippage Ratio", "1.15%", "1.22%", "-7 bps"]
+            ]
+        }
     },
     {
         "id": "hdfc-cite-3",
@@ -70,8 +91,8 @@ class VectorStore:
     Combines BM25 Okapi lexical scoring and Dense TF-IDF vector embeddings
     via Reciprocal Rank Fusion (RRF) and convex linear weighting.
     Enforces strict point-in-time isolation (zero future look-ahead),
-    ticker pre-filtering, thread-safe atomic document persistence,
-    and anti-DoS chunk/size caps.
+    2D table structural preservation, ticker pre-filtering,
+    thread-safe atomic document persistence, and anti-DoS chunk/size caps.
     """
 
     def __init__(self, storage_path: Optional[str] = None):
@@ -98,7 +119,12 @@ class VectorStore:
                 missing = [d for d in ADDITIONAL_CORPUS if d.get("id") not in existing_ids]
                 if missing:
                     self.documents.extend(missing)
-                    self._save_to_disk()
+                # Sync structured tables for existing items
+                for d in self.documents:
+                    for add_d in ADDITIONAL_CORPUS:
+                        if d.get("id") == add_d.get("id") and "structured_table" in add_d:
+                            d["structured_table"] = add_d["structured_table"]
+                self._save_to_disk()
             except Exception:
                 self.documents = list(RAG_DOCUMENTS) + list(ADDITIONAL_CORPUS)
         else:
@@ -135,7 +161,10 @@ class VectorStore:
                 section = d.get("section", "")
                 excerpt = d.get("excerpt", "")
                 keywords = " ".join(d.get("keywords", []))
-                corpus_texts.append(f"{title} {section} {excerpt} {keywords}")
+                table_text = ""
+                if d.get("structured_table"):
+                    table_text = table_parser.linearize_table_for_indexing(d["structured_table"])
+                corpus_texts.append(f"{title} {section} {excerpt} {keywords} {table_text}")
 
             self._vectorizer = TfidfVectorizer(
                 stop_words="english",
@@ -269,6 +298,7 @@ class VectorStore:
                 "section": doc.get("section", "General Section"),
                 "excerpt": doc.get("excerpt", ""),
                 "full_context": doc.get("full_context") or doc.get("excerpt", ""),
+                "structured_table": doc.get("structured_table"),
                 "relevance_score": combined_relevance,
                 "similarity_cosine": round(sim_score, 3),
                 "bm25_score": round(bm_score, 3),
@@ -334,16 +364,22 @@ class VectorStore:
         content: str,
         source_type: str = "USER_UPLOAD",
         fiscal_period: str = "FY26",
-        filing_date: Optional[str] = None
+        filing_date: Optional[str] = None,
+        structured_table: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Thread-safely ingests a new document excerpt into the vector store.
+        Automatically parses markdown tables to preserve 2D structural integrity.
         """
         sanitized = self.sanitize_text(content)
         if not sanitized:
             raise ValueError("Document content cannot be empty")
 
         ticker_up = ticker.strip().upper()
+
+        # Auto-extract markdown table if not provided
+        if structured_table is None:
+            structured_table = table_parser.extract_markdown_table(sanitized)
 
         # Heuristic polarity classification
         pos_words = ["growth", "record", "expansion", "profit", "surpassed", "strong", "cash", "dividend", "revival"]
@@ -371,6 +407,7 @@ class VectorStore:
             "filing_date": actual_date,
             "section": section.strip() or "Uploaded Excerpt",
             "excerpt": sanitized,
+            "structured_table": structured_table,
             "sentiment": sentiment,
             "relevance_base": 0.88,
             "keywords": [w for w in (pos_words + neg_words) if w in lower][:5]
@@ -386,6 +423,7 @@ class VectorStore:
             "document_title": new_doc["document_title"],
             "sentiment": sentiment,
             "filing_date": actual_date,
+            "has_structured_table": structured_table is not None,
             "status": "INDEXED"
         }
 
@@ -397,7 +435,7 @@ class VectorStore:
     ) -> List[Dict[str, Any]]:
         """
         Extracts pages from uploaded PDF bytes via PyMuPDF, chunks text,
-        and adds them as indexed citations under safe limits.
+        extracts embedded 2D tables, and adds them as indexed citations under safe limits.
         """
         if not HAS_PYMUPDF:
             raise RuntimeError("PyMuPDF (fitz) is not installed for PDF ingestion.")
@@ -409,6 +447,9 @@ class VectorStore:
         for page_num in range(min(len(doc), 25)):
             page = doc[page_num]
             text = page.get_text()
+            extracted_tables = table_parser.extract_pdf_tables(page)
+            structured_table = extracted_tables[0] if extracted_tables else None
+
             if len(text.strip()) > 50:
                 section_name = f"Item/Page {page_num + 1}"
                 res = self.add_document(
@@ -416,7 +457,8 @@ class VectorStore:
                     document_title=document_title,
                     section=section_name,
                     content=text[:1500],
-                    source_type="PDF_UPLOAD"
+                    source_type="PDF_UPLOAD",
+                    structured_table=structured_table
                 )
                 added_chunks.append(res)
 

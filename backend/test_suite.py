@@ -393,14 +393,17 @@ def run_all_tests():
     print("23. Institutional Walk-Forward Backtesting v2 Passed: Calmar/Profit Factor, slippage modeling, multi-window compounding, hit-rate, and benchmark alpha verified.")
 
     print("\n==========================================")
-    # 24. Test Hybrid Search (BM25 Okapi + Dense Vector RRF)
+    # 24. Test Hybrid Search (BM25 Okapi + Dense Vector RRF & Table Structure)
     from backend.tests.test_hybrid_rag import (
         test_bm25_tokenization_and_scoring,
         test_reciprocal_rank_fusion,
         test_exact_financial_term_retrieval,
         test_point_in_time_hybrid_isolation,
         test_retrieval_modes_comparison,
-        test_rag_agent_hybrid_provenance
+        test_rag_agent_hybrid_provenance,
+        test_table_structure_preservation_and_linearization,
+        test_retrieval_returns_structured_tables,
+        test_rag_evaluator_numerical_faithfulness
     )
     test_bm25_tokenization_and_scoring()
     test_reciprocal_rank_fusion()
@@ -408,7 +411,10 @@ def run_all_tests():
     test_point_in_time_hybrid_isolation()
     test_retrieval_modes_comparison()
     test_rag_agent_hybrid_provenance()
-    print("24. Hybrid Search Passed: BM25 Okapi lexical scoring, Dense Vector RRF fusion, exact term retrieval, point-in-time isolation, and citation explainability verified.")
+    test_table_structure_preservation_and_linearization()
+    test_retrieval_returns_structured_tables()
+    test_rag_evaluator_numerical_faithfulness()
+    print("24. Hybrid Search Passed: BM25 Okapi lexical scoring, Dense Vector RRF fusion, 2D table preservation, exact term retrieval, point-in-time isolation, and citation explainability verified.")
 
     print("\n==========================================")
     print("SUCCESS: ALL 24 TEST SCENARIOS PASSED WITH 100% ACCURACY!")

@@ -28,6 +28,7 @@ class RAGAgent:
                 "section": c.get("section", "General Section"),
                 "excerpt": c.get("excerpt", ""),
                 "full_context": c.get("full_context") or c.get("excerpt", ""),
+                "structured_table": c.get("structured_table"),
                 "relevance_score": c.get("relevance_score", 0.85),
                 "similarity_cosine": c.get("similarity_cosine", 0.80),
                 "bm25_score": c.get("bm25_score", 0.0),

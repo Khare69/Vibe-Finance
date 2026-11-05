@@ -13,9 +13,11 @@ from backend.rag.bm25 import (
     ReciprocalRankFusion,
     compute_convex_hybrid_score
 )
+from backend.rag.table_parser import table_parser
 from backend.rag.vector_store import vector_store
 from backend.rag.retriever import rag_retriever
 from backend.agents.rag_agent import rag_agent
+from backend.rag.evaluator import rag_evaluator
 
 
 def test_bm25_tokenization_and_scoring():
@@ -145,6 +147,66 @@ def test_rag_agent_hybrid_provenance():
     assert analysis["citations"][0]["retrieval_method"] == "HYBRID_BM25_DENSE"
 
 
+def test_table_structure_preservation_and_linearization():
+    """Verifies that markdown table extraction preserves row-metric bindings."""
+    md_text = (
+        "| Financial Metric | Q3 FY26 | Q3 FY25 |\n"
+        "| --- | --- | --- |\n"
+        "| Net Interest Margin | 3.45% | 3.34% |\n"
+        "| Gross NPA | 1.28% | 1.34% |\n"
+    )
+    table = table_parser.extract_markdown_table(md_text)
+    assert table is not None
+    assert table["headers"] == ["Financial Metric", "Q3 FY26", "Q3 FY25"]
+    assert len(table["rows"]) == 2
+    assert table["rows"][0] == ["Net Interest Margin", "3.45%", "3.34%"]
+
+    linearized = table_parser.linearize_table_for_indexing(table)
+    assert "Net Interest Margin Q3 FY26: 3.45%" in linearized
+    assert "Gross NPA Q3 FY26: 1.28%" in linearized
+
+
+def test_retrieval_returns_structured_tables():
+    """Verifies that retrieved citations preserve structured tables."""
+    res = vector_store.search_hybrid(
+        ticker="HDFCBANK",
+        query="Net Interest Margin NIM deposits",
+        top_k=2
+    )
+    assert res["status"] == "SUCCESS"
+    citations = res["citations"]
+    has_table = any("structured_table" in c and c["structured_table"] is not None for c in citations)
+    assert has_table is True
+    table_cite = next(c for c in citations if c.get("structured_table"))
+    assert "headers" in table_cite["structured_table"]
+    assert "rows" in table_cite["structured_table"]
+    assert len(table_cite["structured_table"]["rows"]) > 0
+
+
+def test_rag_evaluator_numerical_faithfulness():
+    """Verifies that RAGEvaluator strictly validates numerical entities against citations."""
+    citations = [
+        {
+            "document_title": "Q3 FY26 Call",
+            "section": "MD&A",
+            "fiscal_period": "Q3 FY26",
+            "excerpt": "Net Interest Margin stabilized at 3.45%. Deposits grew 16.8% YoY.",
+            "full_context": "Net Interest Margin stabilized at 3.45%. Deposits grew 16.8% YoY."
+        }
+    ]
+    # Grounded finding with exact numbers
+    findings_valid = ['Q3 FY26 Call (MD&A): "Net Interest Margin stabilized at 3.45% and deposits grew 16.8%"']
+    score_valid, checks_valid = rag_evaluator.evaluate_faithfulness(findings_valid, citations)
+    assert score_valid == 1.0
+    assert checks_valid[0]["is_grounded"] is True
+
+    # Hallucinated finding with fabricated numbers (e.g. 5.80% and 42.1%)
+    findings_invalid = ['Q3 FY26 Call (MD&A): "Net Interest Margin reached 5.80% and deposits surged 42.1%"']
+    score_invalid, checks_invalid = rag_evaluator.evaluate_faithfulness(findings_invalid, citations)
+    assert score_invalid == 0.0
+    assert len(checks_invalid[0]["unsupported_numbers"]) >= 1
+
+
 if __name__ == "__main__":
     test_bm25_tokenization_and_scoring()
     test_reciprocal_rank_fusion()
@@ -152,4 +214,7 @@ if __name__ == "__main__":
     test_point_in_time_hybrid_isolation()
     test_retrieval_modes_comparison()
     test_rag_agent_hybrid_provenance()
-    print("All Hybrid Search unit tests passed successfully!")
+    test_table_structure_preservation_and_linearization()
+    test_retrieval_returns_structured_tables()
+    test_rag_evaluator_numerical_faithfulness()
+    print("All 9 Hybrid Search & Table Structure unit tests passed successfully!")

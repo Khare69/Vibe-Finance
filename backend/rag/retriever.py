@@ -60,7 +60,8 @@ class RAGRetriever:
         document_title: str,
         section: str,
         content: str,
-        source_type: str = "USER_UPLOAD"
+        source_type: str = "USER_UPLOAD",
+        structured_table: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Ingests user-uploaded documents into the persistent vector store.
@@ -70,7 +71,8 @@ class RAGRetriever:
             document_title=document_title,
             section=section,
             content=content,
-            source_type=source_type
+            source_type=source_type,
+            structured_table=structured_table
         )
 
     def ingest_document(
