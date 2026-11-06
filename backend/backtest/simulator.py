@@ -35,6 +35,15 @@ class BacktestSimulator:
                 return entry["df"]
 
         symbol = market_service._resolve_symbol(ticker_up)
+
+        # Check network guard permissions and connectivity
+        try:
+            from backend.data.network_guard import is_network_allowed, probe_connectivity
+        except (ImportError, ValueError):
+            from data.network_guard import is_network_allowed, probe_connectivity
+
+        if not is_network_allowed() or not probe_connectivity():
+            return None
         try:
             t = yf.Ticker(symbol)
             df = t.history(period="2y", interval="1d")
@@ -64,7 +73,14 @@ class BacktestSimulator:
             if now - entry["cached_at"] < self._cache_ttl_seconds:
                 df_bench = entry["df"]
 
-        if df_bench is None:
+        # Guard network access
+        try:
+            from backend.data.network_guard import is_network_allowed, probe_connectivity
+            _allow_bench_fetch = is_network_allowed() and probe_connectivity()
+        except Exception:
+            _allow_bench_fetch = False
+
+        if df_bench is None and _allow_bench_fetch:
             try:
                 t = yf.Ticker(symbol)
                 df_bench = t.history(period="2y", interval="1d")

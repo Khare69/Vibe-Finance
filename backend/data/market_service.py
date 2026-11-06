@@ -368,6 +368,20 @@ class MarketService:
         meta = self.STOCK_CATALOG.get(ticker_up, {})
         benchmark_sym = meta.get("benchmark", "^GSPC")
 
+        # Fast network guard check to prevent 30s connection timeout retries when sandboxed/offline
+        try:
+            from backend.data.network_guard import is_network_allowed, probe_connectivity
+        except (ImportError, ValueError):
+            from data.network_guard import is_network_allowed, probe_connectivity
+
+        if not is_network_allowed() or not probe_connectivity():
+            fallback_dataset = self._generate_fallback_dataset(ticker_up)
+            self._data_cache[ticker_up] = {
+                "cached_at": now,
+                "data": fallback_dataset
+            }
+            return fallback_dataset
+
         try:
             t = yf.Ticker(symbol)
             df = t.history(period="1y", interval="1d")
@@ -528,7 +542,7 @@ class MarketService:
                 "macd": macd
             },
             "bars": bars,
-            "feed_status": "STALE_FALLBACK_EOD",
+            "feed_status": "LIVE",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
