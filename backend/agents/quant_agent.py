@@ -1,4 +1,5 @@
 import time
+import asyncio
 from typing import Dict, Any, List
 
 
@@ -96,8 +97,8 @@ class QuantAgent:
         }
 
     async def analyze_async(self, ticker: str, market_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Asynchronous interface for parallel agent execution."""
-        return self.analyze(ticker, market_data)
+        """Asynchronous non-blocking interface offloaded to thread pool for true cancellable concurrency."""
+        return await asyncio.to_thread(self.analyze, ticker, market_data)
 
 
 quant_agent = QuantAgent()

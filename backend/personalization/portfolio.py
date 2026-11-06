@@ -69,6 +69,8 @@ class PortfolioService:
 
     def get_portfolio(self, user_id: str = "default_user") -> Dict[str, Any]:
         holdings = []
+        usd_fx = market_service.get_usd_inr_rate()
+        fx_rate = usd_fx.get("rate", 84.25)
         try:
             db_holdings = get_all_holdings(user_id)
             if db_holdings:
@@ -77,7 +79,7 @@ class PortfolioService:
                     current_price = stock_info["base_price"] if stock_info else h.avg_cost
                     is_usd = h.currency == "USD"
                     # Normalized market value in INR
-                    market_val = h.shares * current_price * (83.5 if is_usd else 1.0)
+                    market_val = h.shares * current_price * (fx_rate if is_usd else 1.0)
                     pnl_pct = round(((current_price - h.avg_cost) / h.avg_cost) * 100, 2)
                     holdings.append({
                         "ticker": h.ticker,
@@ -178,7 +180,8 @@ class PortfolioService:
             "concentration_heatmap": concentration_heatmap,
             "provenance": {
                 "source": "INTERNAL_PORTFOLIO_LEDGER",
-                "method": "real_time_market_value_aggregation"
+                "method": "real_time_market_value_aggregation",
+                "usd_inr_fx": usd_fx
             }
         }
 
@@ -216,7 +219,8 @@ class PortfolioService:
         current_tech_val = tech_alloc["value"] if tech_alloc else (current_total * current_tech_pct / 100.0)
 
         # Multi-currency normalization (USD equities converted to INR base portfolio)
-        usd_to_inr = 83.5
+        usd_fx = market_service.get_usd_inr_rate()
+        usd_to_inr = usd_fx.get("rate", 84.25)
         is_usd = ticker in ["TSLA", "NVDA", "AAPL"]
         trade_amount = quantity * price * (usd_to_inr if is_usd else 1.0)
 

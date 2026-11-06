@@ -635,5 +635,42 @@ class MarketService:
             return bars
         return bars[-30:]
 
+    def get_usd_inr_rate(self) -> Dict[str, Any]:
+        """
+        Retrieves live or cached USD/INR exchange rate (USDINR=X) with explicit provenance.
+        Eliminates magic-number hardcoding of currency conversions.
+        """
+        now = time.time()
+        if "USDINR" in self._data_cache:
+            entry = self._data_cache["USDINR"]
+            if now - entry["cached_at"] < 3600:
+                return entry["data"]
+
+        rate = 84.25
+        source = "STATIC_FALLBACK"
+
+        try:
+            from backend.data.network_guard import is_network_allowed, probe_connectivity
+            if is_network_allowed() and probe_connectivity():
+                ticker = yf.Ticker("USDINR=X")
+                fast_info = getattr(ticker, "fast_info", None)
+                if fast_info and hasattr(fast_info, "last_price") and fast_info.last_price:
+                    rate = round(float(fast_info.last_price), 2)
+                    source = "LIVE_YAHOO_USDINR"
+        except Exception:
+            pass
+
+        data = {
+            "rate": rate,
+            "pair": "USD/INR",
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source": source
+        }
+        self._data_cache["USDINR"] = {
+            "cached_at": now,
+            "data": data
+        }
+        return data
+
 
 market_service = MarketService()
