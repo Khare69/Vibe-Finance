@@ -2,11 +2,12 @@ import os
 import re
 import json
 import time
+import uuid
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -29,6 +30,9 @@ from backend.backtest.simulator import backtest_simulator
 from backend.observability.audit_logger import audit_logger
 from backend.database import (
     init_db,
+    create_user_async as db_create_user_async,
+    get_user_by_username_async as db_get_user_by_username_async,
+    get_user_by_id_async as db_get_user_by_id_async,
     get_user_profile_async as db_get_user_profile_async,
     upsert_user_profile_async as db_upsert_user_profile_async,
     get_all_holdings_async as db_get_all_holdings_async,
@@ -39,9 +43,28 @@ from backend.database import (
     add_to_watchlist_async as db_add_to_watchlist_async,
     remove_from_watchlist_async as db_remove_from_watchlist_async,
     save_memo_async as db_save_memo_async,
-    get_memos_async as db_get_memos_async
+    get_memos_async as db_get_memos_async,
+    delete_memo_async as db_delete_memo_async
 )
-from backend.models import UserProfileDB, PortfolioHoldingDB, WatchlistDB, DecisionMemoDB
+from backend.models import (
+    UserDB,
+    UserRegisterRequest,
+    UserLoginRequest,
+    UserAuthResponse,
+    UserProfileDB,
+    PortfolioHoldingDB,
+    WatchlistDB,
+    DecisionMemoDB
+)
+from backend.auth.security import hash_password, verify_password, create_access_token
+from backend.auth.dependencies import (
+    get_current_user,
+    require_authenticated_user,
+    resolve_user_session,
+    UserSession,
+    GUEST_SESSION
+)
+from backend.auth.rate_limiter import rate_limit_analysis
 
 
 def sanitize_ticker(ticker: str) -> str:
@@ -62,7 +85,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Vibe Finance Multi-Agent API",
-    description="Multi-Agent system for quantitative, fundamental RAG, and behavioral investment synthesis",
+    description="Multi-Agent system for quantitative, fundamental RAG, behavioral investment synthesis, and tenant isolation",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -136,7 +159,97 @@ class UploadDocumentRequest(BaseModel):
     source_type: Optional[str] = "USER_UPLOAD"
 
 
-# --- Endpoints ---
+# --- Authentication & Session Endpoints (Sub-phase E.2) ---
+
+@app.post("/api/auth/register", response_model=UserAuthResponse)
+async def register_user(req: UserRegisterRequest):
+    """Registers a new user tenant with cryptographically hashed password and generates a signed JWT token."""
+    existing = await db_get_user_by_username_async(req.username)
+    if existing:
+        raise HTTPException(status_code=400, detail="Username is already registered")
+
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    pw_hash = hash_password(req.password)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    new_user = UserDB(
+        id=user_id,
+        username=req.username.strip(),
+        hashed_password=pw_hash,
+        email=req.email.strip() if req.email else None,
+        role="investor",
+        created_at=now_iso
+    )
+    await db_create_user_async(new_user)
+
+    # Initialize private default profile for this new tenant
+    new_profile = UserProfileDB(
+        id=user_id,
+        risk_level="conservative",
+        investment_horizon="medium",
+        panic_sell_tendency=0.8,
+        preferred_sectors=["Energy", "Tech"],
+        portfolio_cash=250000.0,
+        updated_at=now_iso
+    )
+    await db_upsert_user_profile_async(new_profile)
+
+    token = create_access_token({
+        "sub": new_user.id,
+        "username": new_user.username,
+        "role": new_user.role,
+        "email": new_user.email
+    })
+
+    return UserAuthResponse(
+        access_token=token,
+        token_type="bearer",
+        user={
+            "id": new_user.id,
+            "username": new_user.username,
+            "email": new_user.email,
+            "role": new_user.role
+        }
+    )
+
+
+@app.post("/api/auth/login", response_model=UserAuthResponse)
+async def login_user(req: UserLoginRequest):
+    """Authenticates credentials against stored PBKDF2 hash and issues an HS256 JWT access token."""
+    user = await db_get_user_by_username_async(req.username)
+    if not user or not verify_password(req.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_access_token({
+        "sub": user.id,
+        "username": user.username,
+        "role": user.role,
+        "email": user.email
+    })
+
+    return UserAuthResponse(
+        access_token=token,
+        token_type="bearer",
+        user={
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role
+        }
+    )
+
+
+@app.get("/api/auth/me")
+async def get_current_user_profile(current_user: UserSession = Depends(get_current_user)):
+    """Returns the current user session context (authenticated user or guest/demo session)."""
+    session = resolve_user_session(current_user)
+    return {
+        "user": session.model_dump(),
+        "is_authenticated": session.is_authenticated
+    }
+
+
+# --- Health & Readiness Probes ---
 
 @app.get("/api/health")
 async def get_health():
@@ -208,7 +321,10 @@ async def get_orchestrator_topology():
         "state_schema": list(MultiAgentState.model_fields.keys())
     }
 
-@app.get("/api/analysis/stream/{ticker}")
+
+# --- Rate-Limited Analysis & Streaming Endpoints ---
+
+@app.get("/api/analysis/stream/{ticker}", dependencies=[Depends(rate_limit_analysis)])
 async def stream_analysis(
     ticker: str,
     risk_level: Optional[str] = "conservative",
@@ -221,7 +337,7 @@ async def stream_analysis(
 ):
     """
     Streams multi-agent state graph transitions, analyst findings, debate turns,
-    and final consensus synthesis via Server-Sent Events (SSE) preserving full user profile context.
+    and final consensus synthesis via Server-Sent Events (SSE) with rate limiting.
     """
     safe_ticker = sanitize_ticker(ticker)
     sectors = [s.strip() for s in preferred_sectors.split(",")] if preferred_sectors else ["Energy", "Tech"]
@@ -258,7 +374,7 @@ async def stream_analysis(
         }
     )
 
-@app.post("/api/analyze")
+@app.post("/api/analyze", dependencies=[Depends(rate_limit_analysis)])
 async def analyze_stock(req: AnalyzeRequest):
     ticker = sanitize_ticker(req.ticker)
     profile_dict = req.user_profile.model_dump() if req.user_profile else {}
@@ -309,28 +425,32 @@ async def analyze_stock(req: AnalyzeRequest):
     }
 
 @app.post("/api/simulate-trade")
-async def simulate_trade(req: SimulateTradeRequest):
+async def simulate_trade(req: SimulateTradeRequest, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     safe_data = req.model_dump()
     safe_data["ticker"] = sanitize_ticker(safe_data["ticker"])
-    return await asyncio.to_thread(portfolio_service.simulate_trade, safe_data)
+    return await asyncio.to_thread(portfolio_service.simulate_trade, safe_data, user_id=session.id)
 
 @app.get("/api/portfolio")
-async def get_portfolio():
-    return await asyncio.to_thread(portfolio_service.get_portfolio)
+async def get_portfolio(current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    return await asyncio.to_thread(portfolio_service.get_portfolio, user_id=session.id)
 
 @app.get("/api/portfolio/stress-scenarios")
 async def get_stress_scenarios():
     return await asyncio.to_thread(portfolio_service.get_stress_scenarios)
 
 @app.post("/api/portfolio/stress-test")
-async def run_portfolio_stress_test(req: StressTestRequest):
+async def run_portfolio_stress_test(req: StressTestRequest, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     return await asyncio.to_thread(
         portfolio_service.simulate_stress_test,
         scenario_id=req.scenario_id or "rate_hike_2022",
-        custom_shocks=req.custom_shocks
+        custom_shocks=req.custom_shocks,
+        user_id=session.id
     )
 
-@app.post("/api/backtest")
+@app.post("/api/backtest", dependencies=[Depends(rate_limit_analysis)])
 async def run_backtest(req: BacktestRequest):
     safe_ticker = sanitize_ticker(req.ticker)
     if req.simulation_mode == "rolling_walk_forward":
@@ -352,67 +472,90 @@ async def run_backtest(req: BacktestRequest):
 async def get_telemetry_logs():
     return await asyncio.to_thread(audit_logger.get_recent_logs)
 
-# --- SQLite Persistent Non-Blocking CRUD Endpoints ---
+
+# --- SQLite Multi-Tenant Scoped CRUD Endpoints ---
 
 @app.get("/api/user-profile")
-async def get_stored_user_profile():
-    profile = await db_get_user_profile_async()
+async def get_stored_user_profile(current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    profile = await db_get_user_profile_async(user_id=session.id)
     return profile.model_dump()
 
 @app.put("/api/user-profile")
-async def update_stored_user_profile(profile: UserProfileDB):
+async def update_stored_user_profile(profile: UserProfileDB, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    profile.id = session.id
     saved = await db_upsert_user_profile_async(profile)
     return saved.model_dump()
 
 @app.get("/api/portfolio/holdings")
-async def get_stored_holdings():
-    holdings = await db_get_all_holdings_async()
+async def get_stored_holdings(current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    holdings = await db_get_all_holdings_async(user_id=session.id)
     return [h.model_dump() for h in holdings]
 
 @app.post("/api/portfolio/holdings")
-async def upsert_stored_holding(holding: PortfolioHoldingDB):
+async def upsert_stored_holding(holding: PortfolioHoldingDB, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     holding.ticker = sanitize_ticker(holding.ticker)
-    saved = await db_upsert_holding_async(holding)
+    holding.user_id = session.id
+    saved = await db_upsert_holding_async(holding, user_id=session.id)
     return saved.model_dump()
 
 @app.delete("/api/portfolio/holdings/{ticker}")
-async def delete_stored_holding(ticker: str):
+async def delete_stored_holding(ticker: str, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     safe_ticker = sanitize_ticker(ticker)
-    success = await db_delete_holding_async(safe_ticker)
+    success = await db_delete_holding_async(safe_ticker, user_id=session.id)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Holding {safe_ticker} not found")
+        raise HTTPException(status_code=404, detail=f"Holding {safe_ticker} not found for this user")
     return {"status": "deleted", "ticker": safe_ticker}
 
 @app.get("/api/watchlist")
-async def get_user_watchlist():
-    items = await db_get_watchlist_async()
+async def get_user_watchlist(current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    items = await db_get_watchlist_async(user_id=session.id)
     return [w.model_dump() for w in items]
 
 @app.post("/api/watchlist")
-async def add_item_to_watchlist(item: WatchlistDB):
+async def add_item_to_watchlist(item: WatchlistDB, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     item.ticker = sanitize_ticker(item.ticker)
-    saved = await db_add_to_watchlist_async(item)
+    item.user_id = session.id
+    saved = await db_add_to_watchlist_async(item, user_id=session.id)
     return saved.model_dump()
 
 @app.delete("/api/watchlist/{ticker}")
-async def remove_item_from_watchlist(ticker: str):
+async def remove_item_from_watchlist(ticker: str, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     safe_ticker = sanitize_ticker(ticker)
-    success = await db_remove_from_watchlist_async(safe_ticker)
+    success = await db_remove_from_watchlist_async(safe_ticker, user_id=session.id)
     if not success:
-        raise HTTPException(status_code=404, detail=f"Watchlist item {safe_ticker} not found")
+        raise HTTPException(status_code=404, detail=f"Watchlist item {safe_ticker} not found for this user")
     return {"status": "deleted", "ticker": safe_ticker}
 
 @app.post("/api/memos")
-async def save_decision_memo(memo: DecisionMemoDB):
+async def save_decision_memo(memo: DecisionMemoDB, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
     memo.ticker = sanitize_ticker(memo.ticker)
+    memo.user_id = session.id
     memo.memo_markdown = vector_store.sanitize_text(memo.memo_markdown)
-    saved = await db_save_memo_async(memo)
+    saved = await db_save_memo_async(memo, user_id=session.id)
     return saved.model_dump()
 
 @app.get("/api/memos")
-async def list_decision_memos():
-    memos = await db_get_memos_async()
+async def list_decision_memos(current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    memos = await db_get_memos_async(user_id=session.id)
     return [m.model_dump() for m in memos]
+
+@app.delete("/api/memos/{memo_id}")
+async def delete_decision_memo(memo_id: str, current_user: UserSession = Depends(get_current_user)):
+    session = resolve_user_session(current_user)
+    success = await db_delete_memo_async(memo_id, user_id=session.id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Decision memo not found for this user")
+    return {"status": "deleted", "id": memo_id}
 
 @app.post("/api/rag/upload")
 async def upload_rag_document(req: UploadDocumentRequest):

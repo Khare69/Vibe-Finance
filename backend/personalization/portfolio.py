@@ -7,11 +7,11 @@ from backend.data.market_service import market_service
 class PortfolioService:
     """
     Manages current portfolio holdings, risk heatmap computation,
-    and trade impact simulations with behavioral nudge warnings backed by SQLite.
+    and trade impact simulations with behavioral nudge warnings backed by multi-tenant SQLite.
     """
 
     def __init__(self):
-        # Base realistic portfolio holdings fallback
+        # Base realistic portfolio holdings fallback (for demo_user / unauthenticated exploration)
         self.default_holdings = [
             {
                 "ticker": "RELIANCE",
@@ -67,10 +67,10 @@ class PortfolioService:
             }
         ]
 
-    def get_portfolio(self) -> Dict[str, Any]:
+    def get_portfolio(self, user_id: str = "default_user") -> Dict[str, Any]:
         holdings = []
         try:
-            db_holdings = get_all_holdings()
+            db_holdings = get_all_holdings(user_id)
             if db_holdings:
                 for h in db_holdings:
                     stock_info = market_service.get_stock_info(h.ticker)
@@ -95,7 +95,7 @@ class PortfolioService:
         except Exception:
             pass
 
-        if not holdings:
+        if not holdings and user_id == "default_user":
             holdings = self.default_holdings
 
         total_market_value = sum(h["market_value"] for h in holdings)
@@ -106,7 +106,7 @@ class PortfolioService:
 
         cash = 104025.0
         try:
-            user_p = get_user_profile()
+            user_p = get_user_profile(user_id)
             cash = user_p.portfolio_cash
         except Exception:
             pass
@@ -182,7 +182,7 @@ class PortfolioService:
             }
         }
 
-    def simulate_trade(self, trade_req: Dict[str, Any]) -> Dict[str, Any]:
+    def simulate_trade(self, trade_req: Dict[str, Any], user_id: str = "default_user") -> Dict[str, Any]:
         ticker = trade_req.get("ticker", "TSLA").upper()
         action = trade_req.get("action", "BUY").upper()
         quantity = max(1, int(trade_req.get("quantity", 10)))
@@ -206,7 +206,7 @@ class PortfolioService:
             sector = "Tech"
 
         # Dynamic portfolio baseline
-        portfolio_state = self.get_portfolio()
+        portfolio_state = self.get_portfolio(user_id)
         current_total = portfolio_state["total_value"]
         current_invested = portfolio_state["invested_value"]
         current_beta = portfolio_state["portfolio_beta"]
@@ -368,7 +368,8 @@ class PortfolioService:
     def simulate_stress_test(
         self,
         scenario_id: str = "rate_hike_2022",
-        custom_shocks: Dict[str, float] = None
+        custom_shocks: Dict[str, float] = None,
+        user_id: str = "default_user"
     ) -> Dict[str, Any]:
         """
         Simulates the impact of severe macroeconomic and market shocks on the portfolio.
@@ -382,7 +383,7 @@ class PortfolioService:
         if custom_shocks:
             sector_shocks.update(custom_shocks)
 
-        port = self.get_portfolio()
+        port = self.get_portfolio(user_id)
         holdings = port.get("holdings", [])
         cash = port.get("cash", 100000.0)
         baseline_total_val = port.get("total_value", 500000.0)

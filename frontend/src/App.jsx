@@ -15,6 +15,7 @@ import BacktestSimulator from './components/BacktestSimulator';
 import ExportMemoModal from './components/ExportMemoModal';
 import PortfolioRebalancer from './components/PortfolioRebalancer';
 import MacroStressSimulator from './components/MacroStressSimulator';
+import AuthModal from './components/AuthModal';
 
 import {
   checkSystemHealth,
@@ -24,6 +25,8 @@ import {
   getPortfolio,
   getStoredUserProfile,
   updateStoredUserProfile,
+  getCurrentUser,
+  logoutUser,
 } from './services/api';
 
 import {
@@ -35,6 +38,12 @@ import {
 export default function App() {
   // System & Profile State
   const [systemHealth, setSystemHealth] = useState(null);
+  const [currentUser, setCurrentUser] = useState({
+    id: 'default_user',
+    username: 'demo_user',
+    role: 'investor',
+    is_authenticated: false,
+  });
   const [userProfile, setUserProfile] = useState({
     risk_level: 'conservative',
     investment_horizon: 'medium',
@@ -55,6 +64,7 @@ export default function App() {
   const [isVibeCheckOpen, setIsVibeCheckOpen] = useState(false);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState(false);
   const [isExportMemoOpen, setIsExportMemoOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedCitation, setSelectedCitation] = useState(null);
 
   // Fault Injection Toggles
@@ -65,24 +75,55 @@ export default function App() {
   const [streamEvents, setStreamEvents] = useState([]);
   const [streamStep, setStreamStep] = useState('');
 
-  // Initialize data on mount
-  useEffect(() => {
-    async function init() {
-      const [health, stockList, port, storedProf] = await Promise.all([
-        checkSystemHealth(),
-        getStocks(),
-        getPortfolio(),
+  // Reload user and tenant data
+  const refreshTenantData = async () => {
+    try {
+      const [userRes, port, storedProf] = await Promise.all([
+        getCurrentUser().catch(() => null),
+        getPortfolio().catch(() => MOCK_USER_PORTFOLIO),
         getStoredUserProfile().catch(() => null),
       ]);
-      setSystemHealth(health);
-      setStocks(stockList);
-      setPortfolio(port);
+      if (userRes && userRes.user) {
+        setCurrentUser({ ...userRes.user, is_authenticated: !!userRes.is_authenticated });
+      }
+      if (port) setPortfolio(port);
       if (storedProf && storedProf.risk_level) {
         setUserProfile(storedProf);
       }
+    } catch (e) {
+      console.error('Error refreshing tenant data:', e);
+    }
+  };
+
+  // Initialize data on mount
+  useEffect(() => {
+    async function init() {
+      const [health, stockList] = await Promise.all([
+        checkSystemHealth(),
+        getStocks(),
+      ]);
+      setSystemHealth(health);
+      setStocks(stockList);
+      await refreshTenantData();
     }
     init();
   }, []);
+
+  const handleAuthSuccess = async (user) => {
+    setCurrentUser({ ...user, is_authenticated: true });
+    await refreshTenantData();
+  };
+
+  const handleLogout = async () => {
+    logoutUser();
+    setCurrentUser({
+      id: 'default_user',
+      username: 'demo_user',
+      role: 'investor',
+      is_authenticated: false,
+    });
+    await refreshTenantData();
+  };
 
   // Fetch / stream analysis whenever ticker, profile, or fault toggles change
   useEffect(() => {
@@ -101,37 +142,19 @@ export default function App() {
           simulatedStaleData: staleMode,
           simulatedRagTimeout: ragTimeoutMode,
           onEvent: (event) => {
-            if (isCancelled) return;
-            setStreamEvents((prev) => [...prev, event]);
-
-            if (event.type === 'pipeline_started') {
-              setStreamStep(`Fetching live market feed & OHLCV history for ${event.payload?.ticker || selectedTicker}...`);
-            } else if (event.type === 'market_context_loaded') {
-              setStreamStep(`Market context verified. Launching parallel quantitative, vector RAG & risk agents...`);
-            } else if (event.type === 'analysts_started') {
-              setStreamStep('Evaluating RSI momentum, SEC/SEBI vector filings, and behavioral profile...');
-            } else if (event.type === 'analysts_completed') {
-              setStreamStep('Analyst evaluations complete. Commencing adversarial debate...');
-            } else if (event.type === 'debate_started') {
-              setStreamStep('Arbitrating multi-turn adversarial debate between Quant and Fundamental RAG...');
-            } else if (event.type === 'debate_turn') {
-              setStreamStep(`Debate Turn: ${event.payload?.speaker} arguing stance...`);
-            } else if (event.type === 'rebuttal_triggered') {
-              setStreamStep(`Divergence detected: Triggering cyclic rebuttal round (Cycle ${event.payload?.cycle})...`);
-            } else if (event.type === 'convergence_reached') {
-              setStreamStep('Signal convergence reached. Synthesizing multi-factor consensus action...');
-            } else if (event.type === 'synthesis_started') {
-              setStreamStep('Synthesizing capital allocation, explainability modes & audit metrics...');
-            } else if (event.type === 'complete') {
-              setStreamStep('Analysis complete.');
+            if (!isCancelled) {
+              setStreamEvents((prev) => [...prev, event]);
+              if (event.type === 'node_start') {
+                setStreamStep(`Executing ${event.payload?.node}...`);
+              } else if (event.type === 'node_complete') {
+                setStreamStep(`Completed ${event.payload?.node}`);
+              }
             }
           },
           onError: (err) => {
-            console.warn('Streaming telemetry fallback active:', err);
-          },
-          onComplete: (data) => {
-            if (!isCancelled && data) {
-              setAnalysis(data);
+            if (!isCancelled) {
+              console.warn('Stream error handled by fallback:', err);
+              setStreamStep('Stream interrupted. Fallback engaged.');
             }
           },
         });
@@ -168,9 +191,12 @@ export default function App() {
       <Header
         systemHealth={systemHealth}
         userProfile={userProfile}
+        currentUser={currentUser}
         onOpenVibeCheck={() => setIsVibeCheckOpen(true)}
         onOpenDevDrawer={() => setIsDevDrawerOpen(true)}
         onOpenExportMemo={() => setIsExportMemoOpen(true)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
         staleMode={staleMode}
         ragTimeoutMode={ragTimeoutMode}
       />
@@ -191,112 +217,124 @@ export default function App() {
         <TickerSelector
           stocks={stocks}
           selectedTicker={selectedTicker}
-          onSelectTicker={(ticker) => setSelectedTicker(ticker)}
-          isLoading={isLoading}
+          onSelectTicker={setSelectedTicker}
         />
 
-        {/* Live Streaming Status Banner when re-analyzing or loading */}
-        {isLoading && (
-          <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3.5 flex items-center justify-between animate-pulse text-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin shrink-0" />
-              <div>
-                <span className="font-semibold text-white block">
-                  Live Agent State Machine Streaming ({selectedTicker}):
-                </span>
-                <span className="text-indigo-300 font-mono text-[11px]">
-                  {streamStep || 'Orchestrator arbitrating agents...'}
-                </span>
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-indigo-400 bg-indigo-900/40 px-2.5 py-1 rounded-full border border-indigo-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-              <span>{streamEvents.length} SSE events received</span>
+        {/* Real-time Price & Provenance Header */}
+        <PriceBanner
+          priceData={analysis?.price_data}
+          companyName={analysis?.company_name}
+          ticker={selectedTicker}
+          userProfile={userProfile}
+        />
+
+        {/* Explain Mode Switcher (Beginner vs. Expert Trader) */}
+        <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800/80 px-4 py-3 rounded-xl">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              Explanation Tone:
+            </span>
+            <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+              <button
+                onClick={() => setExplainMode('beginner')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  explainMode === 'beginner'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Beginner Intuitive
+              </button>
+              <button
+                onClick={() => setExplainMode('expert')}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                  explainMode === 'expert'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Quant Trader Pro
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Loading Overlay or Price Banner */}
-        {isLoading && !analysis ? (
-          <div className="bg-[#0f172a] border border-slate-800 rounded-2xl p-12 text-center">
-            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <h3 className="text-base font-bold text-white">
-              Agents Analyzing {selectedTicker}...
-            </h3>
-            <p className="text-xs text-indigo-300 mt-2 font-mono">
-              {streamStep}
-            </p>
-          </div>
-        ) : (
-          analysis && (
-            <>
-              {/* Live Price & Day Change Banner */}
-              <PriceBanner
-                analysis={analysis}
-                isStale={staleMode}
-                isRagTimeout={ragTimeoutMode}
-              />
+          {/* Active Streaming Node Indicator */}
+          {isLoading && (
+            <div className="flex items-center gap-2 text-xs font-mono text-indigo-400 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+              <span>{streamStep || 'Reasoning across state graph...'}</span>
+            </div>
+          )}
+        </div>
 
-              {/* Multi-Agent Debate Section (Quant, RAG Fundamental, Behavioral Risk) */}
-              <MultiAgentDebate
-                analysis={analysis}
-                onOpenCitation={(cite) => setSelectedCitation(cite)}
-              />
+        {/* Core Multi-Agent Adversarial Debate & Synthesis Grid */}
+        <MultiAgentDebate
+          agents={analysis?.agents}
+          debate={analysis?.debate}
+          synthesis={analysis?.synthesis}
+          regulatoryGuardrail={analysis?.regulatory_compliance_guardrail}
+          explainMode={explainMode}
+          onSelectCitation={(cit) => setSelectedCitation(cit)}
+          selectedTicker={selectedTicker}
+        />
 
-              {/* 'Why This, Why Now?' Decomposition & ELI5 Toggle */}
-              <WhyThisWhyNow
-                synthesis={analysis.synthesis}
-                explainMode={explainMode}
-                onToggleExplainMode={(mode) => setExplainMode(mode)}
-                citations={analysis?.agents?.rag?.citations || []}
-                onOpenCitation={(cite) => setSelectedCitation(cite)}
-              />
+        {/* Grounding & Explainability: Why This Stock, Why Right Now? */}
+        <WhyThisWhyNow
+          ticker={selectedTicker}
+          synthesis={analysis?.synthesis}
+          quantResult={analysis?.agents?.quant}
+          ragResult={analysis?.agents?.rag}
+          behavioralResult={analysis?.agents?.behavioral_risk}
+          priceData={analysis?.price_data}
+          explainMode={explainMode}
+        />
 
-              {/* 2-Column Grid: Sentiment Shift Timeline & Portfolio Risk Heatmap */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <SentimentTimeline sentimentData={analysis.sentiment_shift} />
-                <PortfolioHeatmapSimulator
-                  portfolio={portfolio}
-                  userProfile={userProfile}
-                  activeTicker={selectedTicker}
-                  currentPrice={currentPrice}
-                />
-              </div>
+        {/* Institutional Backtesting & Walk-Forward Validation Engine */}
+        <BacktestSimulator
+          ticker={selectedTicker}
+        />
 
-              {/* Advanced Risk Tools: Portfolio Rebalancer & Macro Stress Testing */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PortfolioRebalancer
-                  portfolio={portfolio}
-                  userProfile={userProfile}
-                  onRebalanceComplete={() => {
-                    // Refresh portfolio state on rebalance
-                    getPortfolio().then(setPortfolio).catch(console.error);
-                  }}
-                />
-                <MacroStressSimulator
-                  portfolio={portfolio}
-                  activeTicker={selectedTicker}
-                />
-              </div>
+        {/* Institutional Macroeconomic Stress-Testing Simulator */}
+        <MacroStressSimulator
+          portfolio={portfolio}
+        />
 
-              {/* Historical Backtesting Simulator */}
-              <BacktestSimulator activeTicker={selectedTicker} />
+        {/* Two-Column Grid: Sentiment Timeline & Dynamic Portfolio Heatmap */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SentimentTimeline
+            sentimentShift={analysis?.sentiment_shift}
+            ticker={selectedTicker}
+          />
 
-              {/* Resiliency & Fault Injection Toggles */}
-              <ResiliencyControls
-                staleMode={staleMode}
-                ragTimeoutMode={ragTimeoutMode}
-                onToggleStale={setStaleMode}
-                onToggleRagTimeout={setRagTimeoutMode}
-                onReset={handleResetFaults}
-              />
-            </>
-          )
-        )}
+          <PortfolioHeatmapSimulator
+            portfolio={portfolio}
+            currentPrice={currentPrice}
+            userProfile={userProfile}
+            selectedTicker={selectedTicker}
+          />
+        </div>
+
+        {/* Portfolio Rebalancer & Trade Optimization Panel */}
+        <PortfolioRebalancer
+          portfolio={portfolio}
+          selectedTicker={selectedTicker}
+          synthesis={analysis?.synthesis}
+          userProfile={userProfile}
+        />
+
+        {/* Architecture Resiliency & Fault Injection Showcase */}
+        <ResiliencyControls
+          staleMode={staleMode}
+          ragTimeoutMode={ragTimeoutMode}
+          onToggleStale={() => setStaleMode(!staleMode)}
+          onToggleRagTimeout={() => setRagTimeoutMode(!ragTimeoutMode)}
+          onResetFaults={handleResetFaults}
+          telemetry={analysis?.telemetry}
+        />
       </main>
 
-      {/* Footer & SEBI Compliance Guardrail */}
-      <footer className="border-t border-slate-800/80 bg-[#080c14] py-6 px-4 text-xs text-slate-500">
+      {/* Footer */}
+      <footer className="border-t border-slate-800/80 bg-[#06090e] py-6 px-4 lg:px-8 text-xs text-slate-500 mt-12">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
           <div className="space-y-1">
             <span className="block font-medium text-slate-400">
@@ -352,6 +390,14 @@ export default function App() {
         onClose={() => setIsExportMemoOpen(false)}
         analysis={analysis}
         userProfile={userProfile}
+      />
+
+      {/* User Authentication & Tenant Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        activeUser={currentUser}
       />
     </div>
   );

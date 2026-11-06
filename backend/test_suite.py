@@ -190,6 +190,7 @@ def run_all_tests():
 
     # 13. Test Portfolio Holding CRUD
     test_h = PortfolioHoldingDB(
+        user_id="default_user",
         ticker="TESTSTOCK",
         company_name="Test Stock Inc.",
         shares=10.0,
@@ -216,13 +217,14 @@ def run_all_tests():
     print("13. Portfolio Holding CRUD Passed: Add, delete, and anti-reseeding guard verified.")
 
     # 14. Test Watchlist & Decision Memo Persistence
-    db.add_to_watchlist(WatchlistDB(ticker="NVDA", target_price=130.0, notes="Wait for support"))
+    db.add_to_watchlist(WatchlistDB(user_id="default_user", ticker="NVDA", target_price=130.0, notes="Wait for support"))
     wl = db.get_watchlist()
     assert any(w.ticker == "NVDA" for w in wl)
     db.remove_from_watchlist("NVDA")
 
     memo = DecisionMemoDB(
         id="memo-test-1",
+        user_id="default_user",
         ticker="RELIANCE",
         company_name="Reliance Industries",
         memo_markdown="# Test Memo Content"
@@ -311,6 +313,7 @@ def run_all_tests():
 
     test_memo = DecisionMemoDB(
         id="memo-rest-test-1",
+        user_id="default_user",
         ticker="NVDA",
         company_name="NVIDIA Corp",
         memo_markdown="# Executive Decision Memo\nVerified via REST API."
@@ -348,6 +351,7 @@ def run_all_tests():
     test_backtest_fallback_honesty_and_provenance()
     print("20. Mathematical Properties & Invariants Passed: Non-linear RSI scoring, weekly VaR root-time scaling, dynamic beta/volatility, macro regimes, shortfall risk, backtest fallback honesty, and provenance verified.")
 
+    print("\n==========================================")
     # 21. Test RAG Faithfulness & Citation Evaluation Benchmark
     from backend.rag.evaluator import rag_evaluator
     rag_bench = rag_evaluator.run_benchmark_suite()
@@ -420,7 +424,23 @@ def run_all_tests():
     print("24. Hybrid Search Passed: BM25 Okapi lexical scoring, Dense Vector RRF fusion, 2D table preservation, exact term retrieval, point-in-time isolation, and citation explainability verified.")
 
     print("\n==========================================")
-    print("SUCCESS: ALL 24 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    # 25. Sub-phase E.2: User Authentication, JWT Middleware, Tenant Database Isolation & Rate Limiting
+    from backend.tests.test_auth_tenant_isolation import (
+        test_password_hashing_and_verification,
+        test_jwt_token_lifecycle_and_tamper_proofing,
+        test_sliding_window_rate_limiter,
+        test_multi_tenant_database_isolation,
+        test_user_repository_crud
+    )
+    test_password_hashing_and_verification()
+    test_jwt_token_lifecycle_and_tamper_proofing()
+    test_sliding_window_rate_limiter()
+    test_multi_tenant_database_isolation()
+    test_user_repository_crud()
+    print("25. Multi-Tenant Auth & Isolation Passed: PBKDF2 hashing, HS256 JWT, sliding rate limiter, and SQLite tenant workspace isolation verified.")
+
+    print("\n==========================================")
+    print("SUCCESS: ALL 25 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

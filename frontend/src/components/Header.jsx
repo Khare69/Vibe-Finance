@@ -1,12 +1,15 @@
 import React from 'react';
-import { Activity, Shield, Sparkles, Terminal, Wifi, AlertTriangle, FileDown } from 'lucide-react';
+import { Activity, Shield, Sparkles, Terminal, Wifi, AlertTriangle, FileDown, User, LogIn, LogOut } from 'lucide-react';
 
 export default function Header({
   systemHealth,
   userProfile,
+  currentUser,
   onOpenVibeCheck,
   onOpenDevDrawer,
   onOpenExportMemo,
+  onOpenAuthModal,
+  onLogout,
   staleMode,
   ragTimeoutMode,
 }) {
@@ -118,6 +121,37 @@ export default function Header({
             <Terminal className="w-3.5 h-3.5 text-indigo-400" />
             <span className="hidden md:inline">Dev Audit</span>
           </button>
+
+          {/* Multi-Tenant Authentication Badge & Actions */}
+          {currentUser?.is_authenticated ? (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-mono"
+                title={`Logged in as ${currentUser.username} (${currentUser.role})`}
+              >
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="font-semibold max-w-[100px] truncate">@{currentUser.username}</span>
+              </div>
+              <button
+                onClick={onLogout}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                title="Sign out to Guest / Demo Mode"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+              <button
+                onClick={onOpenAuthModal}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all hover:border-indigo-500/40"
+                title="Sign in or register for private portfolio & memos"
+              >
+                <LogIn className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Sign In</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

@@ -9,6 +9,88 @@ import {
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
+// --- JWT Authentication & Token Storage Helpers ---
+
+export function getAuthToken() {
+  try {
+    return localStorage.getItem('vibe_auth_token') || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setAuthToken(token) {
+  try {
+    if (token) {
+      localStorage.setItem('vibe_auth_token', token);
+    } else {
+      localStorage.removeItem('vibe_auth_token');
+    }
+  } catch (e) {
+    console.error('LocalStorage access error:', e);
+  }
+}
+
+export function getAuthHeaders() {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export async function registerUser({ username, password, email = null }) {
+  const res = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, email }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Registration failed' }));
+    throw new Error(err.detail || 'Registration failed');
+  }
+  const data = await res.json();
+  if (data.access_token) {
+    setAuthToken(data.access_token);
+  }
+  return data;
+}
+
+export async function loginUser({ username, password }) {
+  const res = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Login failed' }));
+    throw new Error(err.detail || 'Invalid username or password');
+  }
+  const data = await res.json();
+  if (data.access_token) {
+    setAuthToken(data.access_token);
+  }
+  return data;
+}
+
+export function logoutUser() {
+  setAuthToken(null);
+}
+
+export async function getCurrentUser() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/auth/me`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('Fetch user failed');
+    return await res.json();
+  } catch (err) {
+    return {
+      user: { id: 'default_user', username: 'demo_user', role: 'investor' },
+      is_authenticated: false,
+    };
+  }
+}
+
+// --- Health & Stocks Probes ---
+
 export async function checkSystemHealth() {
   try {
     const res = await fetch(`${BASE_URL}/api/health`, { method: 'GET' });
@@ -67,7 +149,9 @@ export async function streamMultiAgentAnalysis({
   const url = `${BASE_URL}/api/analysis/stream/${encodeURIComponent(ticker)}?${queryParams.toString()}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!response.ok) {
       throw new Error(`SSE streaming endpoint error: ${response.status}`);
     }
@@ -107,22 +191,23 @@ export async function streamMultiAgentAnalysis({
           }
         }
 
-        if (eventType && dataPayload !== null) {
-          onEvent({ type: eventType, payload: dataPayload, timestamp: new Date().toISOString() });
-          if (eventType === 'complete') {
-            completedResult = dataPayload;
-            completedResult.is_offline_mock = false;
-            onComplete(completedResult);
-          }
+        if (eventType === 'complete') {
+          completedResult = dataPayload;
         }
+
+        onEvent({ type: eventType, payload: dataPayload });
       }
     }
 
     if (completedResult) {
+      onComplete(completedResult);
       return completedResult;
     }
 
-    // Fallback if stream closed before complete event
+    throw new Error('Stream finished without complete event');
+  } catch (err) {
+    console.warn(`SSE stream error: ${err.message}. Falling back to standard /api/analyze.`);
+    onError(err);
     return await runMultiAgentAnalysis({
       ticker,
       userProfile,
@@ -130,18 +215,6 @@ export async function streamMultiAgentAnalysis({
       simulatedStaleData,
       simulatedRagTimeout,
     });
-  } catch (err) {
-    console.warn('Streaming connection failed or backend offline, falling back to static analysis:', err);
-    onError(err);
-    const fallback = await runMultiAgentAnalysis({
-      ticker,
-      userProfile,
-      explainMode,
-      simulatedStaleData,
-      simulatedRagTimeout,
-    });
-    onComplete(fallback);
-    return fallback;
   }
 }
 
@@ -161,7 +234,7 @@ export async function runMultiAgentAnalysis({
   try {
     const res = await fetch(`${BASE_URL}/api/analyze`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         ticker,
         user_profile: userProfile,
@@ -171,29 +244,32 @@ export async function runMultiAgentAnalysis({
       }),
     });
 
-    if (!res.ok) throw new Error('Backend analyze failed');
-    const data = await res.json();
-    return { ...data, is_offline_mock: false };
-  } catch (err) {
-    // Robust mock handling with transparent demo snapshot tagging
-    const base = MOCK_ANALYSES[ticker] || MOCK_ANALYSES['RELIANCE'];
-    const cloned = JSON.parse(JSON.stringify(base));
-    cloned.is_offline_mock = true;
-    cloned.price_data.feed_status = 'OFFLINE_DEMO_SNAPSHOT';
-    cloned.telemetry.degraded_data = true;
-    cloned.telemetry.degraded_reason =
-      'Backend unreachable: Showing offline demo snapshot. Run backend for live agent analysis.';
+    if (!res.ok) {
+      throw new Error(`Backend API returned HTTP status ${res.status}`);
+    }
 
-    // Handle Stale Live Data Simulation
+    return await res.json();
+  } catch (err) {
+    console.warn(
+      `Analysis API call failed (${err.message}). Using client-side deterministic fallback engine.`
+    );
+
+    // Fallback to rich mock data
+    const baseMock = MOCK_ANALYSES[ticker] || MOCK_ANALYSES['RELIANCE'];
+    const cloned = JSON.parse(JSON.stringify(baseMock));
+
+    cloned.ticker = ticker;
+    cloned.timestamp = new Date().toISOString();
+    cloned.is_offline_mock = true;
+
+    // Handle Stale Data Simulation
     if (simulatedStaleData) {
-      cloned.price_data.feed_status = 'STALE_FALLBACK_EOD';
-      cloned.price_data.confidence_penalty = 25.0;
-      cloned.telemetry.degraded_data = true;
+      cloned.price_data.feed_status = 'STALE_SIMULATED';
+      cloned.price_data.confidence_penalty = 0.25;
       cloned.telemetry.degraded_reason =
-        'Live streaming socket disconnected: Utilizing EOD cache snapshot (-25 confidence penalty applied)';
-      cloned.debate.confidence_calibration_score = Math.max(
-        25,
-        cloned.debate.confidence_calibration_score - 25
+        'Simulated Exchange Feed Latency (>45s): Confidence penalty applied to synthesis.';
+      cloned.debate.confidence_calibration_score = Math.round(
+        cloned.debate.confidence_calibration_score * 0.75
       );
       cloned.telemetry.confidence_score =
         cloned.debate.confidence_calibration_score;
@@ -234,7 +310,7 @@ export async function simulateTrade({
   try {
     const res = await fetch(`${BASE_URL}/api/simulate-trade`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         ticker,
         action,
@@ -246,7 +322,6 @@ export async function simulateTrade({
     if (!res.ok) throw new Error('Trade simulation error');
     return await res.json();
   } catch (err) {
-    // Client-side fallback behavioral nudge logic
     const isConservative =
       userProfile.risk_level?.toLowerCase() === 'conservative';
     const isVolatile = ticker === 'TSLA' || ticker === 'NVDA';
@@ -284,7 +359,9 @@ export async function simulateTrade({
 
 export async function getPortfolio() {
   try {
-    const res = await fetch(`${BASE_URL}/api/portfolio`);
+    const res = await fetch(`${BASE_URL}/api/portfolio`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error('Portfolio fetch error');
     return await res.json();
   } catch (err) {
@@ -304,7 +381,7 @@ export async function runBacktest({
   try {
     const res = await fetch(`${BASE_URL}/api/backtest`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         ticker,
         historical_date: historicalDate,
@@ -374,7 +451,6 @@ export async function getStockHistory(ticker = 'RELIANCE', timeframe = '1M') {
     if (!res.ok) throw new Error('Failed to fetch stock history');
     return await res.json();
   } catch (err) {
-    // Generate synthetic mock history if backend unreachable
     const baseP = 2845.50;
     const bars = [];
     const today = new Date();
@@ -399,7 +475,7 @@ export async function uploadRagDocument({ ticker, document_title, section, conte
   try {
     const res = await fetch(`${BASE_URL}/api/rag/upload`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ ticker, document_title, section, content })
     });
     if (!res.ok) throw new Error('Upload document failed');
@@ -418,7 +494,9 @@ export async function searchRagCorpus({ ticker, query = '', topK = 3, asOfDate =
       mode: mode || 'hybrid',
     });
     if (asOfDate) params.append('as_of_date', asOfDate);
-    const res = await fetch(`${BASE_URL}/api/rag/search?${params.toString()}`);
+    const res = await fetch(`${BASE_URL}/api/rag/search?${params.toString()}`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error('Search RAG corpus failed');
     return await res.json();
   } catch (err) {
@@ -436,7 +514,7 @@ export async function saveDecisionMemo(memo) {
   try {
     const res = await fetch(`${BASE_URL}/api/memos`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(memo)
     });
     if (!res.ok) throw new Error('Save memo failed');
@@ -450,7 +528,7 @@ export async function updateStoredUserProfile(profile) {
   try {
     const res = await fetch(`${BASE_URL}/api/user-profile`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(profile)
     });
     if (!res.ok) throw new Error('Update profile failed');
@@ -462,7 +540,9 @@ export async function updateStoredUserProfile(profile) {
 
 export async function getStoredUserProfile() {
   try {
-    const res = await fetch(`${BASE_URL}/api/user-profile`);
+    const res = await fetch(`${BASE_URL}/api/user-profile`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error('Fetch profile failed');
     return await res.json();
   } catch (err) {
@@ -472,11 +552,91 @@ export async function getStoredUserProfile() {
 
 export async function getStoredMemos() {
   try {
-    const res = await fetch(`${BASE_URL}/api/memos`);
+    const res = await fetch(`${BASE_URL}/api/memos`, {
+      headers: { ...getAuthHeaders() },
+    });
     if (!res.ok) throw new Error('Fetch memos failed');
     return await res.json();
   } catch (err) {
     return [];
+  }
+}
+
+export async function getStoredHoldings() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/portfolio/holdings`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('Fetch holdings failed');
+    return await res.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function upsertStoredHolding(holding) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/portfolio/holdings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(holding),
+    });
+    if (!res.ok) throw new Error('Save holding failed');
+    return await res.json();
+  } catch (err) {
+    return holding;
+  }
+}
+
+export async function deleteStoredHolding(ticker) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/portfolio/holdings/${encodeURIComponent(ticker)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('Delete holding failed');
+    return await res.json();
+  } catch (err) {
+    return { status: 'deleted', ticker };
+  }
+}
+
+export async function getWatchlist() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/watchlist`, {
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('Fetch watchlist failed');
+    return await res.json();
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function addToWatchlist(item) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(item),
+    });
+    if (!res.ok) throw new Error('Add to watchlist failed');
+    return await res.json();
+  } catch (err) {
+    return item;
+  }
+}
+
+export async function removeFromWatchlist(ticker) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/watchlist/${encodeURIComponent(ticker)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) throw new Error('Remove from watchlist failed');
+    return await res.json();
+  } catch (err) {
+    return { status: 'deleted', ticker };
   }
 }
 
@@ -527,13 +687,12 @@ export async function runPortfolioStressTest({ scenarioId = 'rate_hike_2022', cu
   try {
     const res = await fetch(`${BASE_URL}/api/portfolio/stress-test`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({ scenario_id: scenarioId, custom_shocks: customShocks })
     });
     if (!res.ok) throw new Error('Stress test error');
     return await res.json();
   } catch (err) {
-    // Client-side fallback calculation
     return {
       scenario: {
         id: scenarioId,
