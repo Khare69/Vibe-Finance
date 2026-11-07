@@ -10,7 +10,7 @@ import {
   Activity,
   Layers
 } from 'lucide-react';
-import { createChart, ColorType } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
 import { getStockHistory } from '../services/api';
 
 export default function PriceBanner({
@@ -124,14 +124,18 @@ export default function PriceBanner({
       height: 280,
     });
 
-    // Add Candlestick Series
-    const candleSeries = chart.addCandlestickSeries({
+    // Add Candlestick Series (supports lightweight-charts v5 and v4)
+    const candleOptions = {
       upColor: '#10b981',
       downColor: '#f43f5e',
       borderVisible: false,
       wickUpColor: '#10b981',
       wickDownColor: '#f43f5e',
-    });
+    };
+    const candleSeries =
+      typeof chart.addSeries === 'function' && CandlestickSeries
+        ? chart.addSeries(CandlestickSeries, candleOptions)
+        : chart.addCandlestickSeries(candleOptions);
 
     const candleData = historyBars.map((b) => ({
       time: b.time,
@@ -142,14 +146,18 @@ export default function PriceBanner({
     }));
     candleSeries.setData(candleData);
 
-    // Add Volume Series
-    const volumeSeries = chart.addHistogramSeries({
+    // Add Volume Series (supports lightweight-charts v5 and v4)
+    const volumeOptions = {
       color: '#6366f1',
       priceFormat: {
         type: 'volume',
       },
       priceScaleId: '',
-    });
+    };
+    const volumeSeries =
+      typeof chart.addSeries === 'function' && HistogramSeries
+        ? chart.addSeries(HistogramSeries, volumeOptions)
+        : chart.addHistogramSeries(volumeOptions);
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
         top: 0.8,
