@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, Zap, Sliders, AlertCircle, Compass } from 'lucide-react';
+import { X, ShieldCheck, Zap, Sliders, AlertCircle, Compass, Scale } from 'lucide-react';
 
 export default function VibeCheckModal({ isOpen, onClose, userProfile, onSaveProfile }) {
   if (!isOpen) return null;
@@ -68,14 +68,14 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
         <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/60">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-              <Compass className="w-6 h-6" />
+              <Scale className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                Financial Vibe Check
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                Investor Risk Profile Calibration
               </h2>
               <p className="text-xs text-slate-400">
-                Calibrate your behavioral risk psychology to guide the multi-agent consensus
+                Calibrate behavioral risk tolerance and drawdown constraints to guide agent consensus
               </p>
             </div>
           </div>
@@ -92,14 +92,14 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
           {/* Scenario 1 */}
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">1</span>
-              Market Stress Scenario: The market drops 10% in a week. What is your gut reaction?
+              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold font-mono">1</span>
+              Market Drawdown Scenario: The portfolio drops 10% in one week. What is your reaction?
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
-                { id: 'panic_sell', label: 'Sell to avoid further loss', desc: 'Preserve cash immediately' },
-                { id: 'panic_freeze', label: 'Freeze & do nothing', desc: 'Wait for recovery' },
-                { id: 'buy_dip', label: 'Aggressively buy the dip', desc: 'Discount opportunity' },
+                { id: 'panic_sell', label: 'Liquidate to preserve cash', desc: 'Strict risk-off capital preservation' },
+                { id: 'panic_freeze', label: 'Hold through volatility', desc: 'Wait for fundamental mean reversion' },
+                { id: 'buy_dip', label: 'Opportunistically buy the dip', desc: 'Capitalize on value dislocations' },
               ].map((opt) => (
                 <button
                   key={opt.id}
@@ -121,8 +121,8 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
           {/* Scenario 2 */}
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">2</span>
-              Investment Horizon: How long do you plan to hold these positions?
+              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold font-mono">2</span>
+              Investment Horizon: What is your primary capital allocation timeframe?
             </label>
             <div className="grid grid-cols-3 gap-2.5">
               {[
@@ -150,14 +150,14 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
           {/* Scenario 3 */}
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">3</span>
-              Volatility Appetite: High-volatility high-beta assets (e.g. TSLA, high-growth AI)
+              <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold font-mono">3</span>
+              High-Beta Volatility Appetite: Sizing in volatile growth equities
             </label>
             <div className="grid grid-cols-3 gap-2.5">
               {[
-                { id: 'avoid', label: 'Avoid Completely', desc: 'Prefer defensive cash cows' },
-                { id: 'moderate', label: '5 - 10% Sizing', desc: 'Controlled satellite exposure' },
-                { id: 'all_in', label: 'Core Focus', desc: 'Embrace maximum beta & alpha' },
+                { id: 'avoid', label: 'Strict Avoidance', desc: 'Focus exclusively on defensive cash flows' },
+                { id: 'moderate', label: 'Capped (5-10%)', desc: 'Disciplined tactical satellite allocation' },
+                { id: 'all_in', label: 'Core Allocation', desc: 'Embrace maximum beta & alpha potential' },
               ].map((opt) => (
                 <button
                   key={opt.id}
@@ -194,7 +194,7 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
               onChange={(e) => setRiskSlider(Number(e.target.value))}
               className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
             />
-            <div className="flex justify-between text-[11px] text-slate-500">
+            <div className="flex justify-between text-[11px] text-slate-500 font-mono">
               <span>Capital Preservation (0)</span>
               <span>Balanced Growth (50)</span>
               <span>Max Alpha (100)</span>
@@ -202,12 +202,12 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
           </div>
 
           {/* Instant Calibrated Profile Preview */}
-          <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-950/20 space-y-2">
+          <div className="p-4 rounded-xl border border-indigo-500/30 bg-slate-950/80 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  Calculated Vibe Profile
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-300 font-mono">
+                  Calibrated Risk Mandate
                 </span>
               </div>
               <span
@@ -223,7 +223,7 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
               </span>
             </div>
 
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-slate-300 leading-relaxed">
               {calculated.riskLevel === 'conservative' &&
                 'The Behavioral Risk Agent will prioritize capital preservation, penalize volatile speculative rallies, and require strict margin-of-safety fundamentals.'}
               {calculated.riskLevel === 'moderate' &&
@@ -234,8 +234,8 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
 
             <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
               <div>
-                Panic Sell Score:{' '}
-                <span className="text-white font-bold">{calculated.panicTendency}</span> (0.0 - 1.0)
+                Panic Sell Sensitivity:{' '}
+                <span className="text-white font-bold">{calculated.panicTendency}</span>
               </div>
               <div>
                 Max Tolerable Drawdown:{' '}
@@ -263,7 +263,7 @@ export default function VibeCheckModal({ isOpen, onClose, userProfile, onSavePro
           <button
             type="button"
             onClick={handleApply}
-            className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+            className="px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]"
           >
             Apply & Recalibrate Engine
           </button>

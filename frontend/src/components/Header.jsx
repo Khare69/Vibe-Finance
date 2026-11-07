@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Shield, Sparkles, Terminal, Wifi, AlertTriangle, FileDown, User, LogIn, LogOut } from 'lucide-react';
+import { Activity, Shield, Terminal, Wifi, AlertTriangle, FileDown, User, LogIn, LogOut, Sliders } from 'lucide-react';
 
 export default function Header({
   systemHealth,
@@ -24,37 +24,33 @@ export default function Header({
   const riskLevel = userProfile?.risk_level || 'conservative';
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#080c14]/90 backdrop-blur-md px-4 lg:px-8 py-3">
+    <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-[#080c14]/95 backdrop-blur-md px-4 lg:px-8 py-3">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Brand / Logo */}
         <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 shadow-lg shadow-indigo-500/25">
-            <Sparkles className="w-5 h-5 text-white" />
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
-            </span>
+          <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 border border-indigo-500/40 shadow-md shadow-indigo-950/50">
+            <Activity className="w-5 h-5 text-indigo-300" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xl font-bold tracking-tight text-white">
+              <span className="text-lg font-bold tracking-tight text-white">
                 Vibe<span className="text-indigo-400">Finance</span>
               </span>
-              <span className="px-1.5 py-0.5 text-[10px] uppercase tracking-wider font-semibold bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">
-                v1.0 Multi-Agent
+              <span className="px-1.5 py-0.2 text-[10px] uppercase tracking-wider font-mono font-semibold bg-indigo-500/15 text-indigo-300 rounded border border-indigo-500/30">
+                Institutional v1.0
               </span>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
-              Explainable AI Financial Reasoning Engine
+            <p className="text-xs text-slate-400 hidden sm:block font-normal">
+              Multi-Factor Equity Research & Quantitative Risk Engine
             </p>
           </div>
         </div>
 
         {/* Status Indicators & Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Feed Status Indicator */}
           <div
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-mono font-medium transition-all ${
               isDegraded
                 ? 'bg-amber-500/10 border-amber-500/40 text-amber-300'
                 : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
@@ -67,7 +63,7 @@ export default function Header({
           >
             {isDegraded ? (
               <>
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden md:inline">Feed:</span>
                 <span className="font-semibold">Degraded EOD</span>
               </>
@@ -83,39 +79,40 @@ export default function Header({
           {/* User Risk Profile Badge with quick re-calibrate trigger */}
           <button
             onClick={onOpenVibeCheck}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:scale-105 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:border-slate-600 ${
               riskBadgeColors[riskLevel] || riskBadgeColors.conservative
             }`}
-            title="Click to recalibrate your risk profile via Vibe Check"
+            title="Click to recalibrate your risk profile"
           >
             <Shield className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Profile:</span>
             <span className="font-bold capitalize">{riskLevel}</span>
           </button>
 
-          {/* Vibe Check Modal Trigger Button */}
+          {/* Risk Profile Calibration Modal Trigger Button */}
           <button
             onClick={onOpenVibeCheck}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white text-xs font-semibold shadow-md shadow-indigo-500/20 transition-all hover:shadow-indigo-500/30 hover:scale-[1.02] active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-95"
+            title="Calibrate behavioral risk profile and mandate"
           >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Vibe Check</span>
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Risk Profile</span>
           </button>
 
           {/* Export Investment Decision Memo */}
           <button
             onClick={onOpenExportMemo}
-            className="flex items-center gap-1.5 p-2 md:px-3 md:py-1.5 rounded-lg bg-indigo-950/60 hover:bg-indigo-900/80 border border-indigo-500/30 text-indigo-300 hover:text-white text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 p-2 md:px-3 md:py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium transition-all"
             title="Export complete Multi-Agent Investment Decision Memorandum"
           >
-            <FileDown className="w-3.5 h-3.5" />
+            <FileDown className="w-3.5 h-3.5 text-slate-400" />
             <span className="hidden md:inline">Export Memo</span>
           </button>
 
           {/* Developer / Session Audit Drawer Button */}
           <button
             onClick={onOpenDevDrawer}
-            className="flex items-center gap-1.5 p-2 md:px-3 md:py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-xs font-medium transition-all"
+            className="flex items-center gap-1.5 p-2 md:px-3 md:py-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white text-xs font-medium transition-all"
             title="Open System Telemetry & Agent Latency Audit Drawer"
           >
             <Terminal className="w-3.5 h-3.5 text-indigo-400" />

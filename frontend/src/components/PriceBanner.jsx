@@ -13,7 +13,15 @@ import {
 import { createChart, ColorType } from 'lightweight-charts';
 import { getStockHistory } from '../services/api';
 
-export default function PriceBanner({ analysis, isStale, isRagTimeout }) {
+export default function PriceBanner({
+  analysis: propAnalysis,
+  priceData: propPriceData,
+  companyName: propCompanyName,
+  ticker: propTicker,
+  userProfile: propUserProfile,
+  isStale,
+  isRagTimeout,
+}) {
   const [showChart, setShowChart] = useState(false);
   const [timeframe, setTimeframe] = useState('1M');
   const [historyBars, setHistoryBars] = useState([]);
@@ -21,9 +29,24 @@ export default function PriceBanner({ analysis, isStale, isRagTimeout }) {
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
 
+  const analysis =
+    propAnalysis ||
+    (propPriceData || propTicker
+      ? {
+          company_name: propCompanyName || propTicker,
+          ticker: propTicker,
+          price_data: propPriceData,
+          synthesis: {},
+        }
+      : null);
+
   if (!analysis) return null;
 
-  const { company_name, ticker, price_data, timestamp, synthesis } = analysis;
+  const company_name = analysis.company_name || propCompanyName || analysis.ticker;
+  const ticker = analysis.ticker || propTicker;
+  const price_data = analysis.price_data || propPriceData;
+  const timestamp = analysis.timestamp;
+  const synthesis = analysis.synthesis;
   const isPositive = (price_data?.change_percent || 0) >= 0;
   const feedStatus = price_data?.feed_status || (isStale ? 'STALE_FALLBACK_EOD' : 'LIVE');
   const symbol = price_data?.symbol || (['NVDA', 'AAPL', 'TSLA'].includes(ticker?.toUpperCase()) ? '$' : '₹');

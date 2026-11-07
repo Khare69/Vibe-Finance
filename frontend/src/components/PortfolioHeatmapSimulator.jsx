@@ -18,19 +18,21 @@ export default function PortfolioHeatmapSimulator({
   portfolio,
   userProfile,
   activeTicker,
+  selectedTicker,
   currentPrice = 240,
 }) {
+  const currentSelected = selectedTicker || activeTicker || 'TSLA';
   const [tradeAction, setTradeAction] = useState('BUY');
   const [tradeQuantity, setTradeQuantity] = useState(15);
-  const [tradeTicker, setTradeTicker] = useState(activeTicker || 'TSLA');
+  const [tradeTicker, setTradeTicker] = useState(currentSelected);
   const [simResult, setSimResult] = useState(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [showNudgeModal, setShowNudgeModal] = useState(false);
 
-  // Update ticker if activeTicker changes
+  // Update ticker if activeTicker / selectedTicker changes
   React.useEffect(() => {
-    if (activeTicker) setTradeTicker(activeTicker);
-  }, [activeTicker]);
+    if (currentSelected) setTradeTicker(currentSelected);
+  }, [currentSelected]);
 
   // Baseline ticker price lookup to prevent cross-ticker price pollution
   const TICKER_PRICES = {

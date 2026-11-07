@@ -35,7 +35,8 @@ import {
 } from 'recharts';
 import { runBacktest } from '../services/api';
 
-export default function BacktestSimulator({ activeTicker = 'NVDA' }) {
+export default function BacktestSimulator({ ticker, activeTicker }) {
+  const effectiveTicker = ticker || activeTicker || 'NVDA';
   const [simulationMode, setSimulationMode] = useState('single_window'); // 'single_window' | 'rolling_walk_forward'
   const [selectedDate, setSelectedDate] = useState('2024-10-15');
   const [holdingDays, setHoldingDays] = useState(90);
@@ -48,7 +49,7 @@ export default function BacktestSimulator({ activeTicker = 'NVDA' }) {
 
   // Dynamic currency symbol determination
   const isUS = ['NVDA', 'AAPL', 'TSLA', 'MSFT', 'AMZN', 'GOOGL'].includes(
-    activeTicker?.toUpperCase()
+    effectiveTicker?.toUpperCase()
   );
   const currencySymbol = isUS ? '$' : '₹';
 
@@ -59,7 +60,7 @@ export default function BacktestSimulator({ activeTicker = 'NVDA' }) {
 
     try {
       const data = await runBacktest({
-        ticker: activeTicker,
+        ticker: effectiveTicker,
         historicalDate: selectedDate,
         holdingDays: Number(holdingDays),
         simulationMode: activeMode,
@@ -78,7 +79,7 @@ export default function BacktestSimulator({ activeTicker = 'NVDA' }) {
   // Re-run whenever the active ticker changes
   useEffect(() => {
     handleRunBacktest();
-  }, [activeTicker]);
+  }, [effectiveTicker]);
 
   const isRolling = result?.simulation_mode === 'rolling_walk_forward';
   const isProfitable = isRolling

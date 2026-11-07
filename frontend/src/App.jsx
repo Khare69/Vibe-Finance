@@ -222,10 +222,13 @@ export default function App() {
 
         {/* Real-time Price & Provenance Header */}
         <PriceBanner
+          analysis={analysis}
           priceData={analysis?.price_data}
           companyName={analysis?.company_name}
           ticker={selectedTicker}
           userProfile={userProfile}
+          isStale={staleMode}
+          isRagTimeout={ragTimeoutMode}
         />
 
         {/* Explain Mode Switcher (Beginner vs. Expert Trader) */}
@@ -269,11 +272,13 @@ export default function App() {
 
         {/* Core Multi-Agent Adversarial Debate & Synthesis Grid */}
         <MultiAgentDebate
+          analysis={analysis}
           agents={analysis?.agents}
           debate={analysis?.debate}
           synthesis={analysis?.synthesis}
           regulatoryGuardrail={analysis?.regulatory_compliance_guardrail}
           explainMode={explainMode}
+          onOpenCitation={(cit) => setSelectedCitation(cit)}
           onSelectCitation={(cit) => setSelectedCitation(cit)}
           selectedTicker={selectedTicker}
         />
