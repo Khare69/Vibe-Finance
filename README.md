@@ -1,6 +1,16 @@
-# Vibe Finance - Multi-Agent Investment Intelligence Platform
+# 📈 Vibe Finance — Multi-Agent Investment Intelligence Platform
 
-A high-performance, personalized multi-agent financial intelligence system designed for retail investors. It orchestrates specialized quantitative, fundamental, and behavioral risk agents to generate transparent, explainable, and risk-calibrated investment consensus.
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18.0+-61DAFB.svg?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind-3.0+-38B2AC.svg?style=flat-square&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED.svg?style=flat-square&logo=docker&logoColor=white)](Dockerfile)
+[![TradingView](https://img.shields.io/badge/Charts-TradingView%20Lightweight-2962FF.svg?style=flat-square)](https://tradingview.github.io/lightweight-charts/)
+[![Tests](https://img.shields.io/badge/Tests-21%2F21%20Passing-brightgreen.svg?style=flat-square)](#-comprehensive-test-suite)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square)](LICENSE)
+
+An enterprise-grade, explainable multi-agent financial intelligence and risk calibration engine. It orchestrates specialized quantitative, fundamental RAG, and behavioral risk agents through adversarial debate to deliver transparent, data-grounded consensus on equity allocations.
 
 ---
 
@@ -151,3 +161,9 @@ python -u backend/test_suite.py
 19. **Persistent SQLite REST Integration:** Verified profile and memo endpoints.
 20. **Mathematical Properties & Invariance Benchmarks:** RSI boundary monotonicity, moving average identities, Volume Anomaly ratios, CAGR & Max Drawdown formulas, and portfolio conservation laws.
 21. **RAG Faithfulness & Citation Evaluation:** Contextual grounding, numerical entity precision ($100\%$), institutional hallucination tolerance ($\le 0.05$), and negative control prompt rejection.
+
+---
+
+## 📄 License
+
+Distributed under the [Apache 2.0 License](LICENSE).
