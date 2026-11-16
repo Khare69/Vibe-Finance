@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from backend.data.market_service import market_service
 from backend.data.universe import universe_engine
+from backend.data.leaderboard_service import leaderboard_service
 from backend.rag.corpus import RAG_DOCUMENTS
 from backend.rag.retriever import rag_retriever
 from backend.rag.vector_store import vector_store
@@ -328,6 +329,14 @@ async def resolve_stock(ticker: str):
         "ticker": canonical,
         "metadata": stock
     }
+
+@app.get("/api/market/leaderboard")
+async def get_market_leaderboard(refresh: bool = False):
+    """
+    Returns the auto-refreshing Indian equities leaderboard with 5-minute sliding cache.
+    Includes top gainers, top losers, volume shockers, and momentum leaders.
+    """
+    return await asyncio.to_thread(leaderboard_service.get_leaderboard, force_refresh=refresh)
 
 @app.get("/api/stocks/{ticker}/history")
 async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):

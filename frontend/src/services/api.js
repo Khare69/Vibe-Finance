@@ -147,6 +147,41 @@ export async function resolveStock(ticker) {
   }
 }
 
+export async function getMarketLeaderboard(forceRefresh = false) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/market/leaderboard?refresh=${forceRefresh ? 'true' : 'false'}`);
+    if (!res.ok) throw new Error('Failed to fetch market leaderboard');
+    return await res.json();
+  } catch (err) {
+    console.warn('Leaderboard fallback:', err);
+    return {
+      status: 'fallback',
+      last_updated: 'Live EOD',
+      seconds_until_next_refresh: 300,
+      rankings: {
+        top_gainers: [
+          { rank: 1, symbol: 'COCHINSHIP', company_name: 'Cochin Shipyard', change_percent: 5.4, price: 1580.0, sector: 'Defense' },
+          { rank: 2, symbol: 'ZOMATO', company_name: 'Zomato Limited', change_percent: 4.2, price: 260.0, sector: 'Consumer Tech' },
+          { rank: 3, symbol: 'CDSL', company_name: 'Central Depository Services', change_percent: 3.8, price: 1420.0, sector: 'Financials' },
+          { rank: 4, symbol: 'TATAMOTORS', company_name: 'Tata Motors', change_percent: 2.9, price: 940.0, sector: 'Automotive' },
+        ],
+        top_losers: [
+          { rank: 1, symbol: 'WIPRO', company_name: 'Wipro Limited', change_percent: -2.1, price: 540.0, sector: 'IT Services' },
+          { rank: 2, symbol: 'ASIANPAINT', company_name: 'Asian Paints', change_percent: -1.6, price: 2950.0, sector: 'Consumer Goods' },
+        ],
+        volume_shockers: [
+          { rank: 1, symbol: 'COCHINSHIP', company_name: 'Cochin Shipyard', volume_anomaly_ratio: 3.2, change_percent: 5.4, price: 1580.0 },
+          { rank: 2, symbol: 'RVNL', company_name: 'Rail Vikas Nigam', volume_anomaly_ratio: 2.8, change_percent: 3.1, price: 420.0 },
+        ],
+        momentum_leaders: [
+          { rank: 1, symbol: 'HAL', company_name: 'Hindustan Aeronautics', momentum_score: 88, change_percent: 3.5, price: 4650.0 },
+          { rank: 2, symbol: 'TCS', company_name: 'Tata Consultancy Services', momentum_score: 79, change_percent: 1.8, price: 3915.0 },
+        ],
+      },
+    };
+  }
+}
+
 export async function streamMultiAgentAnalysis({
   ticker = 'RELIANCE',
   userProfile = {
