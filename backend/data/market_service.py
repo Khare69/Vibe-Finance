@@ -9,8 +9,14 @@ import yfinance as yf
 
 try:
     from backend.data.universe import universe_engine
+    from backend.data.market_cache import market_cache, CACHE_TTL_QUOTE, CACHE_TTL_HISTORY
+    from backend.data.rate_limiter import market_rate_limiter, market_circuit_breaker
+    from backend.data.session_manager import create_stealth_session
 except (ImportError, ValueError):
     from data.universe import universe_engine
+    from data.market_cache import market_cache, CACHE_TTL_QUOTE, CACHE_TTL_HISTORY
+    from data.rate_limiter import market_rate_limiter, market_circuit_breaker
+    from data.session_manager import create_stealth_session
 
 # Suppress benign pandas/yfinance deprecation warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -365,16 +371,35 @@ class MarketService:
         """
         ticker_up = ticker.upper()
         now = time.time()
+        cache_key = f"quote:{ticker_up}"
 
-        # Check in-memory cache
+        # 1. Check in-memory micro-cache
         if ticker_up in self._data_cache:
             entry = self._data_cache[ticker_up]
             if now - entry["cached_at"] < self._cache_ttl_seconds:
                 return entry["data"]
 
+        # 2. Check persistent SQLite WAL Cache
+        cached = market_cache.get(cache_key)
+        if cached:
+            self._data_cache[ticker_up] = {"cached_at": now, "data": cached}
+            return cached
+
+        # 3. Check Circuit Breaker (Trip on HTTP 429 cooldown)
+        can_req, cb_reason = market_circuit_breaker.can_execute()
+        if not can_req:
+            stale = market_cache.get_stale(cache_key)
+            if stale:
+                stale["feed_status"] = "STALE_FALLBACK_EOD"
+                return stale
+            return self._generate_fallback_dataset(ticker_up)
+
+        # 4. Acquire Token Bucket Rate Limiter quota (2 req/s)
+        market_rate_limiter.acquire(1.0, timeout=1.0)
+
         symbol = self._resolve_symbol(ticker_up)
         meta = self.STOCK_CATALOG.get(ticker_up, {})
-        benchmark_sym = meta.get("benchmark", "^GSPC")
+        benchmark_sym = meta.get("benchmark", "^NSEI")
 
         # Fast network guard check to prevent 30s connection timeout retries when sandboxed/offline
         try:
@@ -384,6 +409,7 @@ class MarketService:
 
         if not is_network_allowed() or not probe_connectivity():
             fallback_dataset = self._generate_fallback_dataset(ticker_up)
+            market_cache.set(cache_key, fallback_dataset, CACHE_TTL_QUOTE, category="quote")
             self._data_cache[ticker_up] = {
                 "cached_at": now,
                 "data": fallback_dataset
@@ -391,7 +417,8 @@ class MarketService:
             return fallback_dataset
 
         try:
-            t = yf.Ticker(symbol)
+            stealth_sess = create_stealth_session()
+            t = yf.Ticker(symbol, session=stealth_sess)
             df = t.history(period="1y", interval="1d")
 
             if df is not None and not df.empty and len(df) >= 20:
@@ -476,16 +503,24 @@ class MarketService:
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
 
+                market_circuit_breaker.record_success()
+                market_cache.set(cache_key, dataset, ttl_seconds=CACHE_TTL_QUOTE, category="quote")
                 self._data_cache[ticker_up] = {
                     "cached_at": now,
                     "data": dataset
                 }
                 return dataset
-        except Exception:
-            pass
+        except Exception as e:
+            if "429" in str(e) or "Too Many Requests" in str(e):
+                market_circuit_breaker.record_429()
+                stale = market_cache.get_stale(cache_key)
+                if stale:
+                    stale["feed_status"] = "STALE_FALLBACK_EOD"
+                    return stale
 
         # Fallback offline snapshot if yfinance fails
         fallback_dataset = self._generate_fallback_dataset(ticker_up)
+        market_cache.set(cache_key, fallback_dataset, ttl_seconds=CACHE_TTL_QUOTE, category="quote")
         self._data_cache[ticker_up] = {
             "cached_at": now,
             "data": fallback_dataset

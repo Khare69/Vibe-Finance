@@ -4,6 +4,8 @@ from typing import Dict, Any, List
 
 from backend.rag.retriever import rag_retriever
 from backend.agents.llm_client import llm_client
+from backend.rag.filings_crawler import filings_crawler
+from backend.data.universe import universe_engine
 
 
 class RAGAgent:
@@ -76,6 +78,18 @@ class RAGAgent:
         search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
         search_res = rag_retriever.search(ticker=ticker_up, query=search_query, top_k=3)
         citations = search_res.get("citations", [])
+
+        # If not in vector db, check verified universe and crawl dynamically on-demand
+        if not citations:
+            known_stock = None
+            try:
+                known_stock = universe_engine.get_stock(ticker_up)
+            except Exception:
+                pass
+            if known_stock:
+                crawled = filings_crawler.crawl_filings(ticker_up)
+                if crawled:
+                    citations = crawled
 
         if not citations:
             elapsed_ms = max(int((time.perf_counter() - start_time) * 1000) + search_res.get("retrieval_ms", 1), 1)
@@ -150,6 +164,18 @@ class RAGAgent:
         search_query = f"{ticker_up} revenue operating margins debt capex cash flow guidance risks order book"
         search_res = await asyncio.to_thread(rag_retriever.search, ticker=ticker_up, query=search_query, top_k=3)
         citations = search_res.get("citations", [])
+
+        # If not in vector db, check verified universe and crawl dynamically on-demand
+        if not citations:
+            known_stock = None
+            try:
+                known_stock = universe_engine.get_stock(ticker_up)
+            except Exception:
+                pass
+            if known_stock:
+                crawled = await asyncio.to_thread(filings_crawler.crawl_filings, ticker_up)
+                if crawled:
+                    citations = crawled
 
         # If ticker is uncataloged and has no documents
         if not citations:
