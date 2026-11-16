@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend.data.market_service import market_service
+from backend.data.universe import universe_engine
 from backend.rag.corpus import RAG_DOCUMENTS
 from backend.rag.retriever import rag_retriever
 from backend.rag.vector_store import vector_store
@@ -278,7 +279,7 @@ async def get_ready():
     except Exception:
         pass
 
-    sample_stock = await asyncio.to_thread(market_service.get_market_data, "NVDA")
+    sample_stock = await asyncio.to_thread(market_service.get_market_data, "RELIANCE")
     is_live = sample_stock.get("feed_status") == "LIVE_YAHOO"
 
     return {
@@ -298,6 +299,35 @@ async def get_ready():
 @app.get("/api/stocks")
 async def list_stocks():
     return await asyncio.to_thread(market_service.list_tracked_stocks)
+
+@app.get("/api/stocks/search")
+async def search_stocks(q: Optional[str] = "", limit: int = 15):
+    """
+    Universal NIFTY 500 in-memory search and ticker resolution.
+    Returns matching Indian equities with symbols, names, sectors, cap tiers, and tickers.
+    """
+    safe_q = (q or "").strip()
+    safe_limit = max(1, min(50, limit))
+    matches = await asyncio.to_thread(universe_engine.search, safe_q, safe_limit)
+    return {
+        "query": safe_q,
+        "count": len(matches),
+        "stocks": matches
+    }
+
+@app.get("/api/stocks/resolve")
+async def resolve_stock(ticker: str):
+    """
+    Resolves any stock symbol or alias into its canonical metadata and Yahoo Finance ticker.
+    """
+    safe_ticker = sanitize_ticker(ticker)
+    stock = await asyncio.to_thread(universe_engine.get_stock, safe_ticker)
+    canonical = await asyncio.to_thread(universe_engine.resolve_ticker, safe_ticker)
+    return {
+        "query": safe_ticker,
+        "ticker": canonical,
+        "metadata": stock
+    }
 
 @app.get("/api/stocks/{ticker}/history")
 async def get_stock_history(ticker: str, timeframe: Optional[str] = "1M"):

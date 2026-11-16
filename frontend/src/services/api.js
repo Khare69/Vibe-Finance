@@ -120,6 +120,33 @@ export async function getStocks() {
   }
 }
 
+export async function searchStocks(query = '', limit = 15) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/stocks/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    if (!res.ok) throw new Error('Search failed');
+    const data = await res.json();
+    return data.stocks || [];
+  } catch (err) {
+    console.warn('Backend search fallback:', err);
+    const q = (query || '').toLowerCase();
+    return (MOCK_STOCKS || []).filter(s =>
+      s.ticker?.toLowerCase().includes(q) ||
+      s.name?.toLowerCase().includes(q) ||
+      s.sector?.toLowerCase().includes(q)
+    ).slice(0, limit);
+  }
+}
+
+export async function resolveStock(ticker) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/stocks/resolve?ticker=${encodeURIComponent(ticker)}`);
+    if (!res.ok) throw new Error('Resolve failed');
+    return await res.json();
+  } catch (err) {
+    return { query: ticker, ticker: `${ticker}.NS`, metadata: null };
+  }
+}
+
 export async function streamMultiAgentAnalysis({
   ticker = 'RELIANCE',
   userProfile = {

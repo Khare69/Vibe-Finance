@@ -7,6 +7,11 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+try:
+    from backend.data.universe import universe_engine
+except (ImportError, ValueError):
+    from data.universe import universe_engine
+
 # Suppress benign pandas/yfinance deprecation warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -118,7 +123,10 @@ class MarketService:
             return self.TICKER_MAP[ticker_up]
         if ticker_up.endswith(".NS") or ticker_up.endswith(".BO"):
             return ticker_up
-        return ticker_up
+        try:
+            return universe_engine.resolve_ticker(ticker_up)
+        except Exception:
+            return f"{ticker_up}.NS"
 
     # --- Technical Analysis Computation Utilities ---
 
@@ -487,13 +495,30 @@ class MarketService:
     def _generate_fallback_dataset(self, ticker: str) -> Dict[str, Any]:
         """Generates deterministic offline snapshot dataset when external APIs fail."""
         ticker_up = ticker.upper()
-        snap = self.OFFLINE_SNAPSHOTS.get(ticker_up, {
-            "price": 100.0,
-            "prev_close": 100.0,
-            "currency": "USD",
-            "volatility": 0.25,
-            "beta": 1.0
-        })
+        snap = self.OFFLINE_SNAPSHOTS.get(ticker_up)
+        
+        if not snap:
+            u_stock = None
+            try:
+                u_stock = universe_engine.get_stock(ticker_up)
+            except Exception:
+                pass
+            if u_stock:
+                snap = {
+                    "price": 1450.0,
+                    "prev_close": 1435.0,
+                    "currency": "INR",
+                    "volatility": u_stock.get("baseline_volatility", 0.28),
+                    "beta": u_stock.get("baseline_beta", 1.15)
+                }
+            else:
+                snap = {
+                    "price": 100.0,
+                    "prev_close": 100.0,
+                    "currency": "INR",
+                    "volatility": 0.25,
+                    "beta": 1.0
+                }
 
         price = snap["price"]
         prev_close = snap.get("prev_close", price)
@@ -579,21 +604,45 @@ class MarketService:
                 "annualized_volatility": dataset["annualized_volatility"] if dataset else meta.get("baseline_volatility", 0.25),
                 "beta": dataset["beta"] if dataset else meta.get("baseline_beta", 1.0)
             }
+        
+        # Check dynamic universe
+        try:
+            u_stock = universe_engine.get_stock(ticker_up)
+            if u_stock:
+                dataset = self._fetch_historical_dataset(ticker_up)
+                return {
+                    "name": u_stock["company_name"],
+                    "sector": u_stock.get("sector", "Diversified"),
+                    "industry": u_stock.get("industry", "General"),
+                    "exchange": "NSE",
+                    "currency": "INR",
+                    "benchmark": "^NSEI",
+                    "cap_tier": u_stock.get("cap_tier", "Mid Cap"),
+                    "baseline_beta": u_stock.get("baseline_beta", 1.0),
+                    "baseline_volatility": u_stock.get("baseline_volatility", 0.25),
+                    "base_price": dataset["current_price"] if dataset else 1000.0,
+                    "annualized_volatility": dataset["annualized_volatility"] if dataset else u_stock.get("baseline_volatility", 0.25),
+                    "beta": dataset["beta"] if dataset else u_stock.get("baseline_beta", 1.0)
+                }
+        except Exception:
+            pass
         return None
 
     def get_market_data(self, ticker: str, simulated_stale_data: bool = False) -> Dict[str, Any]:
         """Returns full market snapshot and calculated technical indicators for the Quant Agent."""
         ticker_up = ticker.upper()
-        meta = self.STOCK_CATALOG.get(ticker_up, {
-            "name": f"{ticker_up} Corp",
-            "sector": "General",
-            "exchange": "Global",
-            "currency": "USD",
-            "baseline_beta": 1.0,
-            "baseline_volatility": 0.25
-        })
+        meta = self.get_stock_info(ticker_up)
+        if not meta:
+            meta = self.STOCK_CATALOG.get(ticker_up, {
+                "name": f"{ticker_up} Limited",
+                "sector": "Diversified",
+                "exchange": "NSE",
+                "currency": "INR",
+                "baseline_beta": 1.0,
+                "baseline_volatility": 0.25
+            })
 
-        currency = meta.get("currency", "USD")
+        currency = meta.get("currency", "INR")
         symbol = "₹" if currency == "INR" else "$"
 
         dataset = self._fetch_historical_dataset(ticker_up)
