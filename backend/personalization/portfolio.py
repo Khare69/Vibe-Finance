@@ -223,6 +223,8 @@ class PortfolioService:
         usd_to_inr = usd_fx.get("rate", 84.25)
         is_usd = ticker in ["TSLA", "NVDA", "AAPL"]
         trade_amount = quantity * price * (usd_to_inr if is_usd else 1.0)
+        current_cash = float(portfolio_state.get("cash", 100000.0))
+        stt_charges = round(trade_amount * 0.00115, 2)
 
         if action == "BUY":
             new_total = current_total + trade_amount
@@ -230,12 +232,14 @@ class PortfolioService:
             new_tech_val = (current_tech_val + trade_amount) if sector == "Tech" else current_tech_val
             projected_tech_pct = round((new_tech_val / new_total) * 100, 1)
             projected_beta = round(((current_invested * current_beta) + (trade_amount * beta)) / new_invested, 2)
+            projected_cash = round(max(0.0, current_cash - trade_amount), 2)
         else: # SELL
             new_total = max(1.0, current_total - trade_amount)
             new_invested = max(1.0, current_invested - trade_amount)
             new_tech_val = max(0.0, current_tech_val - trade_amount) if sector == "Tech" else current_tech_val
             projected_tech_pct = round((new_tech_val / new_total) * 100, 1)
             projected_beta = round(max(0.4, current_beta - ((beta - current_beta) * 0.15)), 2)
+            projected_cash = round(current_cash + trade_amount, 2)
 
         # Evaluate if nudge warning triggers
         warning_triggered = False
@@ -263,13 +267,26 @@ class PortfolioService:
             suggested_alternative = "Proceed with scheduled limit orders."
 
         return {
+            "ticker": ticker,
+            "action": action,
+            "quantity": quantity,
+            "price": price,
+            "trade_amount": round(trade_amount, 2),
+            "current_cash": current_cash,
+            "projected_cash": projected_cash,
+            "estimated_stt_charges": stt_charges,
+            "sector": sector,
             "warning_triggered": warning_triggered,
             "nudge_message": nudge_message,
             "portfolio_delta": {
                 "current_tech_pct": current_tech_pct,
                 "projected_tech_pct": projected_tech_pct,
                 "current_beta": current_beta,
-                "projected_beta": projected_beta
+                "projected_beta": projected_beta,
+                "current_cash": current_cash,
+                "projected_cash": projected_cash,
+                "trade_amount": round(trade_amount, 2),
+                "estimated_stt_charges": stt_charges
             },
             "suggested_alternative": suggested_alternative,
             "provenance": {
