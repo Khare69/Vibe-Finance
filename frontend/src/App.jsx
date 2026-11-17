@@ -15,6 +15,7 @@ import BacktestSimulator from './components/BacktestSimulator';
 import ExportMemoModal from './components/ExportMemoModal';
 import PortfolioRebalancer from './components/PortfolioRebalancer';
 import MacroStressSimulator from './components/MacroStressSimulator';
+import MarketLeaderboard from './components/MarketLeaderboard';
 import AuthModal from './components/AuthModal';
 
 import {
@@ -58,6 +59,9 @@ export default function App() {
   const [analysis, setAnalysis] = useState(MOCK_ANALYSES['RELIANCE']);
   const [portfolio, setPortfolio] = useState(MOCK_USER_PORTFOLIO);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Multi-Page Navigation State ('terminal' | 'leaderboard' | 'backtest' | 'risk' | 'portfolio')
+  const [activeTab, setActiveTab] = useState('terminal');
 
   // Modals & UI Controls
   const [explainMode, setExplainMode] = useState('beginner'); // 'beginner' | 'expert'
@@ -189,6 +193,8 @@ export default function App() {
     <div className="min-h-screen bg-[#080c14] text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
       {/* Sticky Header */}
       <Header
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         systemHealth={systemHealth}
         userProfile={userProfile}
         currentUser={currentUser}
@@ -213,129 +219,196 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6">
-        {/* Watchlist & Ticker Selector */}
-        <TickerSelector
-          stocks={stocks}
-          selectedTicker={selectedTicker}
-          onSelectTicker={setSelectedTicker}
-        />
+        {/* ======================================================== */}
+        {/* PAGE 1: RESEARCH TERMINAL (HOME) */}
+        {/* ======================================================== */}
+        {activeTab === 'terminal' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Watchlist & Ticker Selector */}
+            <TickerSelector
+              stocks={stocks}
+              selectedTicker={selectedTicker}
+              onSelectTicker={setSelectedTicker}
+            />
 
-        {/* Real-time Price & Provenance Header */}
-        <PriceBanner
-          analysis={analysis}
-          priceData={analysis?.price_data}
-          companyName={analysis?.company_name}
-          ticker={selectedTicker}
-          userProfile={userProfile}
-          isStale={staleMode}
-          isRagTimeout={ragTimeoutMode}
-        />
+            {/* Real-time Price & Provenance Header */}
+            <PriceBanner
+              analysis={analysis}
+              priceData={analysis?.price_data}
+              companyName={analysis?.company_name}
+              ticker={selectedTicker}
+              userProfile={userProfile}
+              isStale={staleMode}
+              isRagTimeout={ragTimeoutMode}
+            />
 
-        {/* Explain Mode Switcher (Beginner vs. Expert Trader) */}
-        <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800/80 px-4 py-3 rounded-xl">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Explanation Tone:
-            </span>
-            <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800">
-              <button
-                onClick={() => setExplainMode('beginner')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  explainMode === 'beginner'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Beginner Intuitive
-              </button>
-              <button
-                onClick={() => setExplainMode('expert')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
-                  explainMode === 'expert'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Quant Trader Pro
-              </button>
+            {/* Explain Mode Switcher (Beginner vs. Expert Trader) */}
+            <div className="flex items-center justify-between bg-slate-900/40 border border-slate-800/80 px-4 py-3 rounded-xl">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Explanation Tone:
+                </span>
+                <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                  <button
+                    onClick={() => setExplainMode('beginner')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      explainMode === 'beginner'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Beginner Intuitive
+                  </button>
+                  <button
+                    onClick={() => setExplainMode('expert')}
+                    className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                      explainMode === 'expert'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Quant Trader Pro
+                  </button>
+                </div>
+              </div>
+
+              {/* Active Streaming Node Indicator */}
+              {isLoading && (
+                <div className="flex items-center gap-2 text-xs font-mono text-indigo-400 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                  <span>{streamStep || 'Reasoning across state graph...'}</span>
+                </div>
+              )}
             </div>
+
+            {/* Core Multi-Agent Adversarial Debate & Synthesis Grid */}
+            <MultiAgentDebate
+              analysis={analysis}
+              agents={analysis?.agents}
+              debate={analysis?.debate}
+              synthesis={analysis?.synthesis}
+              regulatoryGuardrail={analysis?.regulatory_compliance_guardrail}
+              explainMode={explainMode}
+              onOpenCitation={(cit) => setSelectedCitation(cit)}
+              onSelectCitation={(cit) => setSelectedCitation(cit)}
+              selectedTicker={selectedTicker}
+            />
+
+            {/* Grounding & Explainability: Why This Stock, Why Right Now? */}
+            <WhyThisWhyNow
+              ticker={selectedTicker}
+              synthesis={analysis?.synthesis}
+              quantResult={analysis?.agents?.quant}
+              ragResult={analysis?.agents?.rag}
+              behavioralResult={analysis?.agents?.behavioral_risk}
+              priceData={analysis?.price_data}
+              explainMode={explainMode}
+            />
+
+            {/* Sentiment Timeline */}
+            <SentimentTimeline
+              sentimentShift={analysis?.sentiment_shift}
+              ticker={selectedTicker}
+            />
           </div>
+        )}
 
-          {/* Active Streaming Node Indicator */}
-          {isLoading && (
-            <div className="flex items-center gap-2 text-xs font-mono text-indigo-400 animate-pulse">
-              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-              <span>{streamStep || 'Reasoning across state graph...'}</span>
+        {/* ======================================================== */}
+        {/* PAGE 2: MARKET MOVERS (5-MINUTE LIVE LEADERBOARD) */}
+        {/* ======================================================== */}
+        {activeTab === 'leaderboard' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <MarketLeaderboard
+              selectedTicker={selectedTicker}
+              onSelectTicker={(symbol) => {
+                setSelectedTicker(symbol);
+                setActiveTab('terminal');
+              }}
+            />
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* PAGE 3: QUANTITATIVE BACKTEST LAB */}
+        {/* ======================================================== */}
+        {activeTab === 'backtest' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Context Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-slate-900/60 border border-slate-800 gap-3">
+              <div>
+                <div className="text-xs uppercase font-bold text-indigo-400 tracking-wider">
+                  Active Backtest Target
+                </div>
+                <div className="text-sm font-bold text-white flex items-center gap-2 mt-0.5">
+                  <span className="font-mono text-base">{selectedTicker}</span>
+                  <span className="text-slate-400 font-normal">
+                    ({analysis?.company_name || 'Selected Equity'})
+                  </span>
+                  <span className="text-xs font-mono text-emerald-400">
+                    ₹{Number(currentPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('terminal')}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 transition-colors shrink-0"
+              >
+                Change Stock in Terminal ➔
+              </button>
             </div>
-          )}
-        </div>
 
-        {/* Core Multi-Agent Adversarial Debate & Synthesis Grid */}
-        <MultiAgentDebate
-          analysis={analysis}
-          agents={analysis?.agents}
-          debate={analysis?.debate}
-          synthesis={analysis?.synthesis}
-          regulatoryGuardrail={analysis?.regulatory_compliance_guardrail}
-          explainMode={explainMode}
-          onOpenCitation={(cit) => setSelectedCitation(cit)}
-          onSelectCitation={(cit) => setSelectedCitation(cit)}
-          selectedTicker={selectedTicker}
-        />
+            <BacktestSimulator
+              ticker={selectedTicker}
+            />
+          </div>
+        )}
 
-        {/* Grounding & Explainability: Why This Stock, Why Right Now? */}
-        <WhyThisWhyNow
-          ticker={selectedTicker}
-          synthesis={analysis?.synthesis}
-          quantResult={analysis?.agents?.quant}
-          ragResult={analysis?.agents?.rag}
-          behavioralResult={analysis?.agents?.behavioral_risk}
-          priceData={analysis?.price_data}
-          explainMode={explainMode}
-        />
+        {/* ======================================================== */}
+        {/* PAGE 4: RISK & STRESS LAB */}
+        {/* ======================================================== */}
+        {activeTab === 'risk' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Macroeconomic Stress-Testing Simulator */}
+            <MacroStressSimulator
+              portfolio={portfolio}
+            />
 
-        {/* Institutional Backtesting & Walk-Forward Validation Engine */}
-        <BacktestSimulator
-          ticker={selectedTicker}
-        />
+            {/* "What-If" Pre-Trade Simulator with Permanent Inline Delta Card */}
+            <PortfolioHeatmapSimulator
+              portfolio={portfolio}
+              currentPrice={currentPrice}
+              userProfile={userProfile}
+              selectedTicker={selectedTicker}
+            />
+          </div>
+        )}
 
-        {/* Institutional Macroeconomic Stress-Testing Simulator */}
-        <MacroStressSimulator
-          portfolio={portfolio}
-        />
+        {/* ======================================================== */}
+        {/* PAGE 5: MY PORTFOLIO & REBALANCER */}
+        {/* ======================================================== */}
+        {activeTab === 'portfolio' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Portfolio Rebalancer & Trade Optimization Panel */}
+            <PortfolioRebalancer
+              portfolio={portfolio}
+              selectedTicker={selectedTicker}
+              synthesis={analysis?.synthesis}
+              userProfile={userProfile}
+            />
 
-        {/* Two-Column Grid: Sentiment Timeline & Dynamic Portfolio Heatmap */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SentimentTimeline
-            sentimentShift={analysis?.sentiment_shift}
-            ticker={selectedTicker}
-          />
-
-          <PortfolioHeatmapSimulator
-            portfolio={portfolio}
-            currentPrice={currentPrice}
-            userProfile={userProfile}
-            selectedTicker={selectedTicker}
-          />
-        </div>
-
-        {/* Portfolio Rebalancer & Trade Optimization Panel */}
-        <PortfolioRebalancer
-          portfolio={portfolio}
-          selectedTicker={selectedTicker}
-          synthesis={analysis?.synthesis}
-          userProfile={userProfile}
-        />
-
-        {/* Architecture Resiliency & Fault Injection Showcase */}
-        <ResiliencyControls
-          staleMode={staleMode}
-          ragTimeoutMode={ragTimeoutMode}
-          onToggleStale={() => setStaleMode(!staleMode)}
-          onToggleRagTimeout={() => setRagTimeoutMode(!ragTimeoutMode)}
-          onResetFaults={handleResetFaults}
-          telemetry={analysis?.telemetry}
-        />
+            {/* Architecture Resiliency & Fault Injection Showcase */}
+            <ResiliencyControls
+              staleMode={staleMode}
+              ragTimeoutMode={ragTimeoutMode}
+              onToggleStale={() => setStaleMode(!staleMode)}
+              onToggleRagTimeout={() => setRagTimeoutMode(!ragTimeoutMode)}
+              onResetFaults={handleResetFaults}
+              telemetry={analysis?.telemetry}
+            />
+          </div>
+        )}
       </main>
 
       {/* Footer */}

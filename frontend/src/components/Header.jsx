@@ -1,7 +1,24 @@
 import React from 'react';
-import { Activity, Shield, Terminal, Wifi, AlertTriangle, FileDown, User, LogIn, LogOut, Sliders } from 'lucide-react';
+import {
+  Activity,
+  Shield,
+  Terminal,
+  Wifi,
+  AlertTriangle,
+  FileDown,
+  User,
+  LogIn,
+  LogOut,
+  Sliders,
+  Award,
+  BarChart3,
+  ShieldAlert,
+  Briefcase,
+} from 'lucide-react';
 
 export default function Header({
+  activeTab = 'terminal',
+  onTabChange = () => {},
   systemHealth,
   userProfile,
   currentUser,
@@ -150,6 +167,77 @@ export default function Header({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Navigation Sub-Bar */}
+      <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-slate-800/60 flex items-center justify-between overflow-x-auto gap-2 no-scrollbar">
+        <nav className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => onTabChange('terminal')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'terminal'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Research Terminal</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('leaderboard')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'leaderboard'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5" />
+            <span>Market Movers (5-Min Leaderboard)</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('backtest')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'backtest'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>Quantitative Backtest Lab</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('risk')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'risk'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Risk & Stress Lab</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('portfolio')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === 'portfolio'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5" />
+            <span>Portfolio & Rebalancer</span>
+          </button>
+        </nav>
       </div>
     </header>
   );
