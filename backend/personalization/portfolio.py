@@ -223,7 +223,7 @@ class PortfolioService:
         usd_to_inr = usd_fx.get("rate", 84.25)
         is_usd = ticker in ["TSLA", "NVDA", "AAPL"]
         trade_amount = quantity * price * (usd_to_inr if is_usd else 1.0)
-        current_cash = float(portfolio_state.get("cash", 100000.0))
+        current_cash = float(trade_req.get("portfolio_cash") or portfolio_state.get("cash", 100000.0))
         stt_charges = round(trade_amount * 0.00115, 2)
 
         if action == "BUY":

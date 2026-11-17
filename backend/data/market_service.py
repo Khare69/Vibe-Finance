@@ -37,6 +37,11 @@ class MarketService:
         "TCS": "TCS.NS",
         "INFY": "INFY.NS",
         "HDFCBANK": "HDFCBANK.NS",
+        "TATAMOTORS": "TATAMOTORS.NS",
+        "COCHINSHIP": "COCHINSHIP.NS",
+        "CDSL": "CDSL.NS",
+        "ZOMATO": "ZOMATO.NS",
+        "ITC": "ITC.NS",
         "NVDA": "NVDA",
         "AAPL": "AAPL",
         "TSLA": "TSLA"
@@ -79,6 +84,51 @@ class MarketService:
             "baseline_beta": 0.92,
             "baseline_volatility": 0.19
         },
+        "TATAMOTORS": {
+            "name": "Tata Motors Ltd.",
+            "sector": "Automotive",
+            "exchange": "NSE",
+            "currency": "INR",
+            "benchmark": "^NSEI",
+            "baseline_beta": 1.35,
+            "baseline_volatility": 0.32
+        },
+        "COCHINSHIP": {
+            "name": "Cochin Shipyard Ltd.",
+            "sector": "Defense & Shipyard",
+            "exchange": "NSE",
+            "currency": "INR",
+            "benchmark": "^NSEI",
+            "baseline_beta": 1.65,
+            "baseline_volatility": 0.42
+        },
+        "CDSL": {
+            "name": "Central Depository Services Ltd.",
+            "sector": "Capital Markets",
+            "exchange": "NSE",
+            "currency": "INR",
+            "benchmark": "^NSEI",
+            "baseline_beta": 1.25,
+            "baseline_volatility": 0.32
+        },
+        "ZOMATO": {
+            "name": "Zomato Ltd.",
+            "sector": "Consumer Tech",
+            "exchange": "NSE",
+            "currency": "INR",
+            "benchmark": "^NSEI",
+            "baseline_beta": 1.45,
+            "baseline_volatility": 0.38
+        },
+        "ITC": {
+            "name": "ITC Ltd.",
+            "sector": "FMCG",
+            "exchange": "NSE",
+            "currency": "INR",
+            "benchmark": "^NSEI",
+            "baseline_beta": 0.55,
+            "baseline_volatility": 0.16
+        },
         "NVDA": {
             "name": "NVIDIA Corporation",
             "sector": "Tech",
@@ -114,6 +164,11 @@ class MarketService:
         "TCS": {"price": 3915.00, "prev_close": 3901.00, "currency": "INR", "volatility": 0.18, "beta": 0.72},
         "INFY": {"price": 1825.40, "prev_close": 1840.10, "currency": "INR", "volatility": 0.24, "beta": 0.85},
         "HDFCBANK": {"price": 1740.20, "prev_close": 1732.50, "currency": "INR", "volatility": 0.19, "beta": 0.92},
+        "TATAMOTORS": {"price": 940.00, "prev_close": 932.00, "currency": "INR", "volatility": 0.32, "beta": 1.35},
+        "COCHINSHIP": {"price": 1580.00, "prev_close": 1540.00, "currency": "INR", "volatility": 0.42, "beta": 1.65},
+        "CDSL": {"price": 1420.00, "prev_close": 1405.00, "currency": "INR", "volatility": 0.32, "beta": 1.25},
+        "ZOMATO": {"price": 260.00, "prev_close": 254.00, "currency": "INR", "volatility": 0.38, "beta": 1.45},
+        "ITC": {"price": 475.00, "prev_close": 472.50, "currency": "INR", "volatility": 0.16, "beta": 0.55},
         "NVDA": {"price": 217.94, "prev_close": 216.00, "currency": "USD", "volatility": 0.44, "beta": 1.75},
         "AAPL": {"price": 234.50, "prev_close": 233.00, "currency": "USD", "volatility": 0.21, "beta": 1.05},
         "TSLA": {"price": 240.00, "prev_close": 245.90, "currency": "USD", "volatility": 0.52, "beta": 2.05}

@@ -440,7 +440,39 @@ def run_all_tests():
     print("25. Multi-Tenant Auth & Isolation Passed: PBKDF2 hashing, HS256 JWT, sliding rate limiter, and SQLite tenant workspace isolation verified.")
 
     print("\n==========================================")
-    print("SUCCESS: ALL 25 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
+    # 26. NIFTY 500 Autocomplete & Zero-Latency Universe Resolution (<2ms)
+    from backend.tests.test_indian_market_infrastructure import (
+        test_nifty500_universe_autocomplete_and_resolution,
+        test_sliding_window_leaderboard_engine,
+        test_dynamic_midcap_ingestion_and_isolation,
+        test_whatif_simulator_before_after_delta_indian_equity,
+        test_sqlite_wal_cache_rate_limiter_and_circuit_breaker
+    )
+    test_nifty500_universe_autocomplete_and_resolution()
+    print("26. NIFTY 500 Autocomplete & Zero-Latency Universe Resolution Passed: Prefix Trie, sector tags, Yahoo NSE mapper, and sub-millisecond lookups verified.")
+
+    print("\n==========================================")
+    # 27. 5-Minute Sliding-Window Market Leaderboard Engine
+    test_sliding_window_leaderboard_engine()
+    print("27. 5-Minute Sliding-Window Leaderboard Passed: Top gainers/losers monotonicity, volume shockers, quant momentum, and 300s countdown verified.")
+
+    print("\n==========================================")
+    # 28. Dynamic Mid-Cap Ingestion Fallback Chain with Uncataloged Ticker Isolation
+    test_dynamic_midcap_ingestion_and_isolation()
+    print("28. Dynamic Mid-Cap Ingestion & Isolation Passed: NSE filings + RSS fallback parser and uncataloged ticker isolation verified.")
+
+    print("\n==========================================")
+    # 29. "What-If" Pre-Trade Simulator Before-vs-After Delta Verification
+    test_whatif_simulator_before_after_delta_indian_equity()
+    print("29. 'What-If' Pre-Trade Simulator Passed: Real-time before/after delta, cash deduction, STT charges, and beta sensitivity verified.")
+
+    print("\n==========================================")
+    # 30. Token Bucket Rate Limiter, SQLite WAL Cache & 60s Circuit Breaker
+    test_sqlite_wal_cache_rate_limiter_and_circuit_breaker()
+    print("30. SQLite WAL Cache, Rate Limiter & Circuit Breaker Passed: Multi-tier TTL, token bucket, stealth session headers, and 60s 429 cooldown verified.")
+
+    print("\n==========================================")
+    print("SUCCESS: ALL 30 TEST SCENARIOS PASSED WITH 100% ACCURACY!")
     print("==========================================")
 
 if __name__ == "__main__":

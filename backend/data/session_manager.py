@@ -65,3 +65,15 @@ def create_stealth_session() -> requests.Session:
     if proxies:
         session.proxies.update(proxies)
     return session
+
+class SessionManager:
+    """Convenience singleton class for stealth session and header retrieval."""
+    @staticmethod
+    def get_headers() -> Dict[str, str]:
+        return get_stealth_headers()
+
+    @staticmethod
+    def create_session() -> requests.Session:
+        return create_stealth_session()
+
+session_manager = SessionManager()

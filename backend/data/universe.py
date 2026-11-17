@@ -53,6 +53,10 @@ class StockUniverse:
         self._initialized = False
         self.__init__()
 
+    @property
+    def stocks(self) -> List[Dict[str, Any]]:
+        return self._stocks
+
     def get_stock(self, symbol_or_ticker: str) -> Optional[Dict[str, Any]]:
         if not symbol_or_ticker:
             return None
@@ -88,6 +92,8 @@ class StockUniverse:
         
         # Fallback normalization
         cleaned = query.strip().upper()
+        if cleaned in ["NVDA", "AAPL", "TSLA", "MSFT", "GOOGL"]:
+            return cleaned
         if not cleaned.endswith(".NS") and not cleaned.endswith(".BO"):
             return f"{cleaned}.NS"
         return cleaned
